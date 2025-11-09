@@ -1,0 +1,143 @@
+---
+title: "AM Project. Part II - CCA"
+author: Tiago Santos (ist110738)
+---
+
+In this section, a canonical correlation analysis of the data will be done. Canonical correlation analysis(CCA) aims to analyze the relationships between 2 sets of variables. Since the information of what each radiance feature detects and it's target wavelength is available to us it's possible to study the shared structure of data in 2 different contexts, in an attempt to perform dimensionality reduction.
+
+![](images/clipboard-3038606868.png)
+
+```{r}
+library(tidyverse)
+library(ggcorrplot)
+library(reshape2)
+library(plotrix)
+library(treemapify)
+library(nortest)
+library(caret)
+library(e1071)
+library(isotree)
+library(rsample)
+library(CCA)
+set.seed(42)
+```
+
+```{r}
+data <- read.csv("dataset_completo_26_12.csv")
+colnames(data) <- gsub("_radiance", "", colnames(data))
+data <- data[, -(c(1:2, (ncol(data)-2):ncol(data)))]
+head(data)
+```
+
+The first CCA will aim to relate bands 1–8, which represent water quality indicators, with bands 9–14( keep in mind the 11 is not present in the data), representing vegetation and atmospheric indicators. Bands 1–8 are associated with detecting chlorophyll, suspended sediments, and dissolved organic matter, providing insights into aquatic ecosystem health and water clarity. Bands 9–14 capture vegetation reflectance, atmospheric corrections, and water vapor absorption, critical for understanding terrestrial processes and minimizing atmospheric interference. This analysis will allow us to explore the relation between aquatic and terrestrial systems. Besides that, you can clearly see a division line between the correlation values when you compare the first 8 values with the last 5, so this will probably prove helpful to achieve dimensionality reduction.
+
+```{r}
+
+#Divide data in the 2 desired groups
+group1 <- data[, 1:8]  # M01 to M08
+group2 <- data[, 9:13] # M09 to M15
+
+#Standardize the data
+group1_scaled <- scale(group1)
+group2_scaled <- scale(group2)
+
+#Perform CCA
+cca_result <- cancor(group1_scaled, group2_scaled)
+
+# Strength of relationships between canonical variates
+print(cca_result$cor)  
+```
+
+```{r}
+canonical_variates1 <- as.matrix(group1_scaled) %*% cca_result$xcoef
+canonical_variates2 <- as.matrix(group2_scaled) %*% cca_result$ycoef
+
+plot(canonical_variates1[, 1], canonical_variates2[, 1],
+     xlab = "Canonical Variate 1 (Group 1)",
+     ylab = "Canonical Variate 1 (Group 2)",
+     main = "CCA: First Pair of Canonical Variates")
+abline(lm(canonical_variates2[, 1] ~ canonical_variates1[, 1]), col = "red")
+
+```
+
+From the first value of the canonical correlation we can conclude that these 2 groups of variables represent a near-perfect correlation indicating a very strong linear relationship between each variable of each group. This suggests that changes in water properties are closely associated with changes in vegetation reflectance and atmospheric conditions. This can be because of land-water interactions, and climate influence showing that for small territories these 2 sets of variables are highly interlined.
+
+Even though it may have dimensionality reduction potential we still need to check how much of the original variance is explained by just the first canonical pair:
+
+```{r}
+# Canonical loadings for Group 1
+loadings_group1 <- cor(group1_scaled, canonical_variates1[, 1])
+
+# Canonical loadings for Group 2
+loadings_group2 <- cor(group2_scaled, canonical_variates2[, 1])
+# Variance explained for Group 1
+variance_explained_group1 <- sum(loadings_group1^2) / ncol(group1_scaled)
+
+# Variance explained for Group 2
+variance_explained_group2 <- sum(loadings_group2^2) / ncol(group2_scaled)
+total_variance_explained <- (variance_explained_group1 + variance_explained_group2) / 2
+total_variance_explained
+
+#Code to see 2nd pair
+# Canonical loadings for Group 1 (Second Canonical Variate)
+loadings_group1_2 <- cor(group1_scaled, canonical_variates1[, 2])
+
+# Canonical loadings for Group 2 (Second Canonical Variate)
+loadings_group2_2 <- cor(group2_scaled, canonical_variates2[, 2])
+
+# Variance explained for Group 1 (Second Canonical Variate)
+variance_explained_group1_2 <- sum(loadings_group1_2^2) / ncol(group1_scaled)
+
+# Variance explained for Group 2 (Second Canonical Variate)
+variance_explained_group2_2 <- sum(loadings_group2_2^2) / ncol(group2_scaled)
+
+# Total variance explained by the second canonical variate pair
+total_variance_explained_2 <- (variance_explained_group1_2 + variance_explained_group2_2) / 2
+total_variance_explained_2
+
+
+```
+
+As expected the total variance explained by just the first pair is almost total, with 91.1%. The 2nd pair explains 6%. It must be taken into account that the sum of the variance explained by all the pairs does not necessarily equal 100% because CCA focuses on maximizing correlation between the two groups at question. Probably PCA will be a better tool to achieve dimensionality reduction.
+
+```{r}
+
+```
+
+The next CCA will be done in the context of the different wavelengths, of each radiation. It's going to be divided in 3 sets:\
+Bands 1-5 represent blue-green spectrum, 6-9 represent yellow-red and the remaining bands cover near-infrared wavelengths.
+
+```{r}
+
+# Divide data into 3 desired groups
+blue_green <- data[, 1:5]   
+yellow_red <- data[, 6:9]  
+nir <- data[, 10:13]    
+
+# Standardize the data for each group
+blue_green_scaled <- scale(blue_green)
+yellow_red_scaled <- scale(yellow_red)
+nir_scaled <- scale(nir)
+
+# Perform pairwise CCA between the groups
+# 1. Blue-Green vs Yellow-Red
+cca_blue_yellow <- cancor(blue_green_scaled, yellow_red_scaled)
+
+# 2. Blue-Green vs Near-Infrared
+cca_blue_nir <- cancor(blue_green_scaled, nir_scaled)
+
+# 3. Yellow-Red vs Near-Infrared
+cca_yellow_nir <- cancor(yellow_red_scaled, nir_scaled)
+
+# Print canonical correlations for each pair
+cat("Canonical correlations (Blue-Green vs Yellow-Red):\n")
+print(cca_blue_yellow$cor)
+
+cat("\nCanonical correlations (Blue-Green vs Near-Infrared):\n")
+print(cca_blue_nir$cor)
+
+cat("\nCanonical correlations (Yellow-Red vs Near-Infrared):\n")
+print(cca_yellow_nir$cor)
+```
+
+Although the values are all very high and similar to each other we can check that radiations close to each other in wavelength represent higher correlation values, this make sense if you expect the spectrum of radiance to be emitted continuously. However with such higher correlation values for CCA one can conclude that this analysis was redundant and didn't give any useful information about the dataset. Nevertheless the first analysis was useful to understand the impact of the climate and homogeneity of the territory.

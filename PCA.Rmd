@@ -1,0 +1,726 @@
+---
+title: "AM Project. Part II - PCA"
+author: Rita Silva (ist1103452)
+---
+
+In this section, a principal component analysis (PCA) of the training data will be done.
+
+```{r}
+#Installation of the required libraries
+
+install.packages("tidyverse")
+install.packages("ggcorrplot")
+install.packages("treemapify")
+install.packages("nortest")
+install.packages("caret")
+install.packages("e1071")
+install.packages("isotree")
+install.packages("rsample")
+install.packages("CCA")
+install.packages("rsvd")
+install.packages("rpca")
+```
+
+
+
+```{r}
+library(tidyverse)
+library(ggcorrplot)
+library(reshape2)
+library(plotrix)
+library(treemapify)
+library(nortest)
+library(caret)
+library(e1071)
+library(isotree)
+library(rsample)
+library(CCA)
+library(rsvd)
+library(rpca)
+library(FNN)
+library(stats)
+library(ggplot2)
+
+set.seed(42)
+```
+
+```{r}
+#Load the original training data_set
+data_total <- read.csv("train_data.csv")
+head(data_total)
+
+#Filter the dataset to only contain the radiation values
+data <- data_total[, grep("^M", colnames(data_total))]
+head(data)
+```
+
+```{r}
+
+#Compute the covariance matrix
+cov_matrix <- cov(data)
+
+#Perform eigen decomposition on the covariance matrix
+eigen_decomp <- eigen(cov_matrix)
+
+#Get the eigenvalues and eigenvectors (principal components)
+eigenvalues <- eigen_decomp$values  
+eigenvectors <- eigen_decomp$vectors
+
+# Variance explained by each principal component
+explained_variance <- eigenvalues / sum(eigenvalues)
+# Cumulative variance explained
+cumulative_variance <- cumsum(explained_variance)
+
+
+cat("\nExplained Variance by each Principal Component:\n")
+print(explained_variance)
+
+cat("\nCumulative Variance Explained:\n")
+print(cumulative_variance)
+
+cat("\nEigenvalues for each pca:\n")
+print(eigenvalues)
+
+cat("\nMean of the eigenvalues:\n")
+
+print(sum(eigenvalues)/6)
+```
+The first 2 principal components should be retained, since they are able to explain 99,7% of the total variance. 
+
+```{r}
+
+variable_names <- c("M01_rho_top", "M02_rho_top", "M03_rho_top", "M04_rho_top",  "M05_rho_top", "M06_rho_top", "M07_rho_top", "M08_rho_top", "M09_rho_top", "M10_rho_top", "M12_rho_top", "M13_rho_top", "M14_rho_top")
+colors <- c("1" = "blue", "2" = "red", "3" = "green", "4"= "orange", "5" = "purple")
+output_colors <- colors[data_total$CLC1N]
+
+# Create a table with loadings for PC1 and PC2
+loadings_table <- data.frame(
+  Variables = variable_names, 
+  PC1_Loadings = round(eigenvectors[, 1], 4), 
+  PC2_Loadings = round(eigenvectors[, 2], 4)
+)
+
+
+print(loadings_table)
+
+
+# Compute the scores (projection of data onto PCs)
+scores <- as.matrix(data) %*% eigenvectors
+#write.csv(scores[, 1:2], file = "PCA_train_data.csv", row.names = FALSE)
+
+
+
+```
+
+
+```{r}
+
+# Function to calculate the average of the k nearest points of the same class in order to produce a more interpretable plot
+
+average_same_class_points <- function(scores, classes, k = 5) {
+
+  averaged_points <- list()
+  unique_classes <- sort(unique(classes))
+  
+  for (class in unique_classes) {
+    # Filter points of the current class
+    class_indices <- which(classes == class)
+    class_scores <- scores[class_indices, ]
+    
+    # Compute k-nearest neighbors within the class
+    knn_result <- get.knn(class_scores, k = k)
+    
+    # Initialize variables to store new averaged points
+    used <- rep(FALSE, nrow(class_scores)) 
+    new_points <- list()
+    
+    for (i in seq_len(nrow(class_scores))) {
+      if (!used[i]) {
+        # Get the indices of the k nearest neighbors
+        nearest_indices <- knn_result$nn.index[i, ]
+        nearest_indices <- nearest_indices[!used[nearest_indices]] # Exclude already used points
+        
+        # Compute the average of the neighbors
+        averaged_point <- colMeans(class_scores[nearest_indices, , drop = FALSE])
+        new_points[[length(new_points) + 1]] <- averaged_point
+        
+        used[nearest_indices] <- TRUE
+      }
+    }
+    
+    # Combine all averaged points for this class
+    averaged_points[[class]] <- do.call(rbind, new_points)
+  }
+  
+  # Combine results for all classes into a single data frame
+  combined_points <- do.call(rbind, lapply(seq_along(averaged_points), function(i) {
+    points <- as.data.frame(averaged_points[[i]])
+    points$class <- sort(unique_classes[i])
+    points
+  }))
+  return(combined_points)
+}
+
+#Using the function defined previously
+
+par(xpd = TRUE, mar = c(5, 4, 4, 8)) 
+
+k <- 30
+averaged_data <- average_same_class_points(scores[, 1:2], data_total$CLC1N, k = k)
+
+colors <- c("1" = "blue", "2" = "red", "3" = "green", "4"= "orange", "5" = "purple")
+
+averaged_data_colors <- colors[as.character(averaged_data$class)]
+
+# Plot the averaged points for PC1 and PC2
+par(xpd = TRUE, mar = c(5, 4, 4, 8))
+plot(averaged_data[, 1], averaged_data[, 2], 
+     xlab = "PC1 Scores", 
+     ylab = "PC2 Scores", 
+     main = "Data Projection onto PC1 and PC2", 
+     pch = 20, col = adjustcolor(averaged_data_colors, alpha.f = 0.5), 
+     bty = "n")
+legend("bottomright", inset = c(-0.1, 0), legend = c("1", "2", "3", "4", "5"), 
+       col = c("blue", "red", "green", "orange", "purple"), pch = 19, title = "Output", cex = 1, bty = "n")
+
+
+
+```
+
+
+```{r}
+#Perfom the same PCA but with standardized data to compare the results 
+
+#Load the standardized training dataset
+data_stand_ <- read_csv("train_data_standardized.csv", show_col_types = FALSE)
+data_stand <- data_stand_[, grep("^M", colnames(data_stand_))]
+
+
+#Compute the covariance matrix
+cov_matrix_stand <- cov(data_stand)
+
+#Perform eigen decomposition on the covariance matrix
+eigen_decomp_stand <- eigen(cov_matrix_stand)
+
+#Get the eigenvalues and eigenvectors (principal components)
+eigenvalues_stand <- eigen_decomp_stand$values   
+eigenvectors_stand <- eigen_decomp_stand$vectors 
+
+# Variance explained by each principal component
+explained_variance_stand <- eigenvalues_stand / sum(eigenvalues_stand)
+# Cumulative variance explained
+cumulative_variances_stand <- cumsum(explained_variance_stand)
+
+
+cat("\nExplained Variance by each Principal Component:\n")
+print(explained_variance_stand)
+
+cat("\nCumulative Variance Explained:\n")
+print(cumulative_variances_stand)
+
+cat("\nEigenvalues for each pca:\n")
+print(eigenvalues_stand)
+
+cat("\nMean of the eigenvalues:\n")
+
+print(sum(eigenvalues_stand)/6)
+
+#PC Plots for the standardized data 
+
+# Create a table with loadings for PC1 and PC2 
+loadings_table_stand <- data.frame(
+  Variables = variable_names,  
+  PC1_Loadings_stand = round(eigenvectors_stand[, 1], 4), 
+  PC2_Loadings_stand = round(eigenvectors_stand[, 2], 4) 
+)
+
+
+print(loadings_table_stand)
+
+
+# Compute the scores (projection of data onto PCs)
+scores_stand <- as.matrix(data_stand) %*% eigenvectors_stand
+#write.csv(scores_stand[, 1:2], file = "PCA_train_data_stand.csv", row.names = FALSE)
+
+
+
+# Use the standardized PCA results to transform the training dataset without outliers
+cleaned_data <- cleaned_data[ ,grep("^M", colnames(cleaned_data))]
+no_out_pca <- as.matrix(cleaned_data) %*% eigenvectors_stand
+#write.csv(no_out_pca[, 1:2], file = "PCA_train_stand_no_outliers.csv", row.names = FALSE)
+
+```
+Performimg PCA in the standardized data resulted in the same conclusions as for the non standardized data. Since there are no features with significantly lower loadings both in PC1 and PC2 (all features contribute very similarly to PC1, which is the direction that explains the majority of the variance), no features will be dropped. As before, the 2 first PC will be retained.
+
+```{r}
+#Use the average_same_class_points function defined above to compute the plot for the standardized PCA
+
+par(xpd = TRUE, mar = c(5, 4, 4, 8)) 
+
+k <- 30
+averaged_data <- average_same_class_points(scores_stand[, 1:2], data_stand_$CLC1N, k = k)
+
+
+colors <- c("1" = "blue", "2" = "red", "3" = "green", "4"= "orange", "5" = "purple")
+
+averaged_data_colors <- colors[as.character(averaged_data$class)]
+
+# Plot the averaged points for PC1 and PC2
+par(xpd = TRUE, mar = c(5, 4, 4, 8))
+plot(averaged_data[, 1], averaged_data[, 2],
+     xlab = "PC1 Scores", 
+     ylab = "PC2 Scores",
+     main = "Data Projection onto PC1 and PC2",
+     pch = 20, col = adjustcolor(averaged_data_colors, alpha.f = 0.5), 
+     bty = "n")
+legend("bottomright", inset = c(-0.1, 0), legend = c("1", "2", "3", "4", "5"), 
+       col = c("blue", "red", "green", "orange", "purple"), pch = 19, title = "Class", cex = 1, bty = "n")
+```
+
+
+
+
+```{r}
+# Scree Plot for Standardized Data to visualize the amount of variance explained by the PCs
+
+scree_data_stand <- data.frame(
+  PrincipalComponent = 1:length(eigenvalues_stand),
+  VarianceExplained = explained_variance_stand * 100 
+)
+
+# Plot the scree plot
+library(ggplot2)
+
+ggplot(scree_data_stand, aes(x = PrincipalComponent, y = VarianceExplained)) +
+  geom_line(color = "blue") +
+  geom_point(size = 3, color = "red") +
+  labs(
+    title = "Scree Plot for Standardized Data",
+    x = "Principal Component",
+    y = "Variance Explained (%)"
+  ) +
+  theme_minimal()
+```
+As can be seen, PC1 and PC2 can explain almost all variance and, thus, should be the two principal components retained. 
+
+```{r}
+# Calculate correlations between each principal component and each standardized observed variable
+
+# Compute the correlations
+pc_variable_correlation <- cor(scores_stand[, 1:2], data_stand)
+
+pc_variable_correlation_df <- as.data.frame(pc_variable_correlation)
+
+rownames(pc_variable_correlation_df) <- c("PC1", "PC2")
+colnames(pc_variable_correlation_df) <- variable_names  
+
+cat("\nCorrelation between Principal Components and Standardized Variables:\n")
+print(pc_variable_correlation_df)
+```
+As can be observed in the previous loading computation, all the features are strongly and similarly correlated to PC1 and, thus, none of them should be discarded. The strong correlations of most variables with PC1 indicate that this component represents a dominant trend or latent factor shared by the majority of the variables. PC2 explains a smaller, orthogonal source of variance. It may capture subtle patterns or variations distinct from PC1. In fact, variables M10, M12, M13 and M14 show the least correlation with PC1 and the highest with PC2. This could suggest that PC2 is more associated with the atmosphere and vegetation part of the data. 
+
+```{r}
+#Compute the normal and standardized PCA transformed validation datasets
+
+#Load the original and standardized validation data 
+data_val <- read.csv("validation_data.csv")
+data_val_stand <- read.csv("validation_data_standardized.csv")
+
+#Filter the dataset to only contain the radiation values
+data_val <- data_val[, grep("^M", colnames(data_total))]
+data_val_stand <- data_val_stand[, grep("^M", colnames(data_val_stand))]
+
+
+scores_val_stand <- as.matrix(data_val_stand) %*% eigenvectors_stand
+
+#write.csv(scores_val_stand[, 1:2], file = "PCA_val_data_standardized.csv", row.names = FALSE)
+
+
+scores_val <- as.matrix(data_val) %*% eigenvectors
+#write.csv(scores_val[, 1:2], file = "PCA_val_data.csv", row.names = FALSE)
+
+
+```
+
+
+```{r}
+#Compute the normal and standardized PCA transformed test data sets
+
+#Load the original and standardized test data 
+data_test <- read.csv("test_data.csv")
+data_test_stand <- read.csv("test_data_standardized.csv")
+
+#Filter the dataset to only contain the radiation values
+data_test <- data_test[, grep("^M", colnames(data_total))]
+data_test_stand <- data_test_stand[, grep("^M", colnames(data_test_stand))]
+
+
+scores_test_stand <- as.matrix(data_test_stand) %*% eigenvectors_stand
+#write.csv(scores_test_stand[, 1:2], file = "PCA_test_data_standardized.csv", row.names = FALSE)
+
+
+scores_test <- as.matrix(data_test) %*% eigenvectors
+#write.csv(scores_test[, 1:2], file = "PCA_test_data.csv", row.names = FALSE)
+
+```
+
+Now, PCA will be used as an outlier detection method per class. 
+
+```{r}
+# Define function to compute outliers per class using PCA
+
+compute_outliers_per_class <- function(data, scores, eigenvalues, loadings, k = 2, alpha_SD = 0.001, alpha_OD = 0.00001) {
+  
+  # Calculate Score Distance (SD)
+  mean_scores <- colMeans(scores)
+  score_distances <- apply(scores, 1, function(row) {
+    sum(((row - mean_scores)^2) / eigenvalues)^0.5
+  })
+  c_SD <- sqrt(qchisq(1 - alpha_SD, df = k))
+  
+  # Calculate Orthogonal Distance (OD)
+
+  orthogonal_distances <- apply(as.matrix(data) - (as.matrix(scores) %*% t(loadings)), 1, function(row) {
+    sqrt(sum(row^2))
+  })
+  mu_hat <- mean(orthogonal_distances^(2/3))
+  sigma_hat <- sd(orthogonal_distances^(2/3))
+  quantile_normal <- qnorm(1 - alpha_OD)
+  c_OD <- (mu_hat + quantile_normal * sigma_hat)^(3/2)
+  
+  # Identify outliers
+  outliers_SD <- which(score_distances > c_SD)
+  outliers_OD <- which(orthogonal_distances > c_OD)
+  outliers_SD <- unname(outliers_SD)
+  outliers_OD <- unname(outliers_OD)
+  combined_outliers <- sort(union(outliers_SD, outliers_OD))
+
+  
+  return(list(SD_outliers = outliers_SD, OD_outliers = outliers_OD, combined_outliers = combined_outliers, c_SD, c_OD))
+}
+
+#Define classes
+classes <- data_stand_$CLC1N
+
+if (length(classes) != nrow(data_stand_)) {
+  stop("The number of rows in data_total does not match the number of class labels in data_total.")
+}
+
+
+class_outlier_results <- list()
+unique_classes <- sort(unique(classes))
+
+# Process each class
+for (class in unique_classes) {
+  cat("\nProcessing class:", class, "\n")
+  
+  # Find indices of the current class
+  class_indices <- which(classes == class)
+  
+  # Find the data that corresponds to each class
+  class_data <- data_stand_[class_indices, ] 
+  class_data <- class_data[, grep("^M", colnames(data_stand_))] 
+  
+  if (length(class_indices) == 0) {
+    cat("Skipping class", class, "- no data available.\n")
+    next
+  }
+  
+  # Compute PCA scores for the current class using the PCA eigenvectors
+  class_scores <- as.matrix(class_data) %*% eigenvectors_stand[, 1:2] 
+  
+  # Compute outliers using the defined function
+  outlier_results <- compute_outliers_per_class(
+    data= class_data,
+    scores = class_scores,
+    eigenvalues = eigenvalues_stand[1:2],
+    loadings = eigenvectors_stand[, 1:2]
+  )
+  
+  
+  class_outlier_results[[class]] <- outlier_results
+  
+
+  cat("\nOutliers based on Score Distance (SD) for class", class, ":\n")
+  print(outlier_results$SD_outliers)
+  
+  cat("\nOutliers based on Orthogonal Distance (OD) for class", class, ":\n")
+  print(outlier_results$OD_outliers)
+  
+  cat("\nCombined Outliers (either SD or OD) for class", class, ":\n")
+  print(outlier_results$combined_outliers)
+
+}
+
+
+```
+
+
+
+```{r}
+#Plot of the outliers found per class
+
+
+for (class in unique_classes) {
+  cat("\nCreating plot for class:", class, "\n")
+  
+  # Retrieve data for the current class
+  class_results <- class_outlier_results[[class]]
+  class_scores <- as.matrix(data_stand_[classes == class, grep("^M", colnames(data_stand_))]) %*% eigenvectors_stand[, 1:2]
+  score_distances <- apply(class_scores, 1, function(row) {
+    sum(((row - colMeans(class_scores))^2) / eigenvalues_stand[1:2])^0.5
+  })
+  orthogonal_distances <- apply(as.matrix(data_stand_[classes == class, grep("^M", colnames(data_stand_))]) - (class_scores %*% t(eigenvectors_stand[, 1:2])), 1, function(row) {
+    sqrt(sum(row^2))
+  })
+  
+  combined_outliers <- class_results$combined_outliers
+  outliers_SD <- class_results$SD_outliers
+  outliers_OD <- class_results$OD_outliers
+  
+  c_SD <- class_results[[4]] 
+  c_OD <- class_results[[5]] 
+  
+
+  plot_data <- data.frame(
+    Score_Distance = score_distances,
+    Orthogonal_Distance = orthogonal_distances,
+    Outlier = ifelse(1:length(score_distances) %in% combined_outliers, "Outlier", "Inlier")
+  )
+  
+  # Assign colors for the points (Red for SD outliers, Blue for OD outliers, Black for regular points)
+  plot_data$Color <- ifelse(
+    plot_data$Outlier == "Outlier", 
+    ifelse(1:nrow(plot_data) %in% outliers_SD, "red", "blue"),
+    "black"
+  )
+  
+  # Create the plot
+  plot <- ggplot(plot_data, aes(x = Score_Distance, y = Orthogonal_Distance, color = Color)) +
+    geom_point(size = 2) +
+    scale_color_manual(values = c("black" = "black", "red" = "red", "blue" = "blue")) +
+    labs(
+      title = paste("Outliers for Class", class),
+      x = "Score Distance",
+      y = "Orthogonal Distance"
+    ) +
+    theme_minimal(base_size = 14) +
+    theme(
+      legend.position = "none",
+      plot.title = element_text(hjust = 0.5, face = "bold")
+    ) +
+    geom_hline(yintercept = c_OD, linetype = "dashed", color = "black") + # OD threshold line
+    geom_vline(xintercept = c_SD, linetype = "dashed", color = "black") # SD threshold line
+  
+  # Display the plot
+  print(plot)
+}
+
+
+```
+
+
+```{r}
+# Function to remove outliers from the standardized training dataset
+
+remove_outliers <- function(data, class_outlier_results, classes_column, unique_classes) {
+  # Create a vector to indicate non-outlier rows
+  non_outlier_indices <- rep(TRUE, nrow(data))
+  
+  # Find the outliers present in each class
+  for (class in unique_classes) {
+    cat("\nProcessing class:", class, "\n")
+    
+    # Find the indices of the current class
+    class_indices <- which(data[[classes_column]] == class)
+    
+    # Get the outlier indices for the current class
+    if (!is.null(class_outlier_results[[class]]$combined_outliers)) {
+      class_outliers <- class_indices[class_outlier_results[[class]]$combined_outliers]
+      non_outlier_indices[class_outliers] <- FALSE
+    }
+  }
+  
+  # Exclude the outliers from the dataset
+  cleaned_data <- data[non_outlier_indices, ]
+  
+  cat("\nNumber of outliers removed:", sum(!non_outlier_indices), "\n")
+  cat("Number of remaining observations:", nrow(cleaned_data), "\n")
+  
+  return(cleaned_data)
+}
+
+#Use the function defined to remove outliers
+cleaned_data <- remove_outliers(
+  data = data_stand_,                 
+  class_outlier_results = class_outlier_results, 
+  classes_column = "CLC1N",           
+  unique_classes = unique_classes      
+)
+
+#write.csv(cleaned_data, file = "train_data_stand_no_ouliers.csv", row.names = FALSE)
+
+
+```
+
+In this part of the analysis, PCA was perform in a balanced dataset to see if it's performance would improve.
+
+
+```{r}
+#PCA on the balanced dataset (the method used for balancing was the same as the ine used in the Classification part)
+
+
+# Step 1: Identify class distribution
+class_distribution <- table(data_stand_$CLC1N)
+print("Original class distribution:")
+print(class_distribution)
+print("Original class distribution (%):")
+print(class_distribution/sum(class_distribution)*100)
+```
+
+
+```{r}
+BALANCE = TRUE
+```
+
+```{r}
+# Step 2: Define target proportions
+
+CLASS_1_PROPORTION = 0.2
+CLASS_2_PROPORTION = 0.3
+CLASS_3_PROPORTION = 0.3
+CLASS_4_PROPORTION = 0.1
+CLASS_5_PROPORTION = 0.1
+target_proportions <- c(CLASS_1_PROPORTION, CLASS_2_PROPORTION, CLASS_3_PROPORTION, CLASS_4_PROPORTION, CLASS_5_PROPORTION)
+total_samples <- sum(class_distribution)
+target_distribution <- floor(total_samples * target_proportions)
+print("Target class distribution:")
+print(target_distribution)
+print("Target class distribution (%):")
+print(target_distribution/sum(target_distribution)*100)
+```
+```{r}
+# Step 3: Perform balancing
+if (BALANCE){
+  balanced_train_cl1 <- data.frame()
+  for (class in names(class_distribution)) {
+    class_data <- data_stand_[data_stand_$CLC1N == class, ]
+    target_size <- target_distribution[as.numeric(class)]
+    
+    if (nrow(class_data) > target_size) {
+      # Undersample majority class
+      sampled_data <- class_data[sample(1:nrow(class_data), target_size), ]
+    } else {
+      # Oversample minority classes
+      sampled_data <- class_data
+      remaining_size <- target_size - nrow(sampled_data)
+      additional_data <- class_data[sample(1:nrow(class_data), size = remaining_size, replace = TRUE), ]
+      sampled_data <- rbind(sampled_data, additional_data)
+    }
+    
+    balanced_train_cl1 <- rbind(balanced_train_cl1, sampled_data)
+  }
+  train_bal_ <- balanced_train_cl1
+}
+
+# Check new distribution
+print("Balanced class distribution:")
+print(table(train_bal_$CLC1N))
+```
+
+
+```{r}
+#Perform PCA on the standardized and balanced train dataset
+
+train_bal <- train_bal_[, grep("^M", colnames(train_bal_))] 
+
+#Compute the covariance matrix
+cov_matrix_stand_bal <- cov(train_bal)
+
+#Perform eigen decomposition on the covariance matrix
+eigen_decomp_stand_bal <- eigen(cov_matrix_stand_bal)
+
+#Get the eigenvalues and eigenvectors (principal components)
+eigenvalues_stand_bal <- eigen_decomp_stand_bal$values   
+eigenvectors_stand_bal <- eigen_decomp_stand_bal$vectors 
+
+# Variance explained by each principal component
+explained_variance_stand_bal <- eigenvalues_stand_bal / sum(eigenvalues_stand_bal)
+# Cumulative variance explained
+cumulative_variances_stand_bal <- cumsum(explained_variance_stand_bal)
+
+
+cat("\nExplained Variance by each Principal Component:\n")
+print(explained_variance_stand_bal)
+
+cat("\nCumulative Variance Explained:\n")
+print(cumulative_variances_stand_bal)
+
+cat("\nEigenvalues for each pca:\n")
+print(eigenvalues_stand_bal)
+
+cat("\nMean of the eigenvalues:\n")
+
+print(sum(eigenvalues_stand_bal)/6)
+
+#PC Plots for the standardized data 
+
+# Create a table with loadings for PC1 and PC2 
+loadings_table_stand_bal <- data.frame(
+  Variables = variable_names,  
+  PC1_Loadings_stand = round(eigenvectors_stand_bal[, 1], 4),
+  PC2_Loadings_stand = round(eigenvectors_stand_bal[, 2], 4) 
+)
+
+print(loadings_table_stand_bal)
+
+
+# Compute the scores (projection of data onto PCs)
+scores_stand_bal <- as.matrix(train_bal) %*% eigenvectors_stand_bal
+#write.csv(scores_stand_bal[, 1:2], file = "PCA_train_stand_bal.csv", row.names = FALSE)
+
+
+#Plot of the projection of data onto the 2 first Principal Components using the average_same_class_points function defined previously
+
+par(xpd = TRUE, mar = c(5, 4, 4, 8)) 
+
+k <- 30
+averaged_data <- average_same_class_points(scores_stand_bal[, 1:2], train_bal_$CLC1N, k = k)
+
+colors <- c("1" = "blue", "2" = "red", "3" = "green", "4"= "orange", "5" = "purple")
+
+averaged_data_colors <- colors[as.character(averaged_data$class)]
+
+# Plot the averaged points for PC1 and PC2
+
+plot(averaged_data[, 1], averaged_data[, 2], 
+     xlab = "PC1 Scores", 
+     ylab = "PC2 Scores",
+     main = "Balanced Data Projection onto PC1 and PC2",
+     pch = 20, col = adjustcolor(averaged_data_colors, alpha.f = 0.5), 
+     bty = "n")
+
+legend("bottomright", inset= c(-0.1, 0), legend = c("1", "2", "3", "4", "5"), 
+       col = c("blue", "red", "green", "orange", "purple"), pch = 19, title = "Class", cex = 1, bty = "n")
+
+```
+The performance of the PCA did not improve, as there still is a huge overlap between observations of different classes. 
+
+
+```{r}
+#Use the PCA obtained from the standardized and balance train data set to transform the test data set
+
+scores_test_stand_bal <- as.matrix(data_test_stand) %*% eigenvectors_stand_bal
+
+#write.csv(scores_test_stand_bal[, 1:2], file = "PCA_test_data_stand_bal.csv", row.names = FALSE)
+```
+
+
+```{r}
+#Use the PCA obtained from the standardized and balance train data set to transform the validation data set
+
+scores_val_stand_bal <- as.matrix(data_val_stand) %*% eigenvectors_stand_bal
+
+#write.csv(scores_val_stand_bal[, 1:2], file = "PCA_val_data_stand_bal.csv", row.names = FALSE)
+```
+

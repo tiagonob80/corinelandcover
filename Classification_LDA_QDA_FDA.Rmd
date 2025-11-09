@@ -1,0 +1,948 @@
+# Classification task
+
+```{r}
+# Libraries
+library(readr)
+library("gridExtra")
+library(ggplot2)
+library(plotly)
+library(tidyr)
+library(dplyr)
+library(caret) #DA
+library(vcvComp) #FDA
+library(e1071) #Bayes
+library(class) #KNN
+library(knitr)
+library(data.table)
+set.seed(86)
+```
+
+```{r}
+data <- read_csv("sampled_dataset.csv", show_col_types = FALSE)
+train <- read_csv("train_data.csv", show_col_types = FALSE)
+validation <- read_csv("validation_data.csv", show_col_types = FALSE)
+test <- read_csv("test_data.csv", show_col_types = FALSE)
+```
+
+```{r}
+data <- data[, !(names(data) %in% c("longitude", "latitude", "CLC2N", "CLC3N", "M11", "M15", "region"))]
+train <- train[, !(names(train) %in%c("longitude", "latitude", "CLC2N", "CLC3N", "M11", "M15", "region"))]
+test <- test[, !(names(test) %in% c("longitude", "latitude", "CLC2N", "CLC3N", "M11", "M15", "region"))]
+validation <- validation[, !(names(validation) %in% c("longitude", "latitude", "CLC2N", "CLC3N", "M11", "M15", "region"))]
+```
+
+```{r}
+data <- as.data.frame(data)
+train <- as.data.frame(train)
+test <- as.data.frame(test)
+```
+
+
+# Classification
+
+## Balancing the dataset (only train data)
+```{r}
+BALANCE = FALSE
+```
+
+```{r}
+# Step 1: Identify class distribution
+class_distribution <- table(train$CLC1N)
+print("Original class distribution:")
+print(class_distribution)
+print("Original class distribution (%):")
+print(class_distribution/sum(class_distribution)*100)
+```
+```{r}
+# Step 2: Define target proportions
+
+CLASS_1_PROPORTION = 0.2
+CLASS_2_PROPORTION = 0.3 
+CLASS_3_PROPORTION = 0.3
+CLASS_4_PROPORTION = 0.1
+CLASS_5_PROPORTION = 0.1
+target_proportions <- c(CLASS_1_PROPORTION, CLASS_2_PROPORTION, CLASS_3_PROPORTION, CLASS_4_PROPORTION, CLASS_5_PROPORTION)
+total_samples <- sum(class_distribution)
+target_distribution <- floor(total_samples * target_proportions)
+print("Target class distribution:")
+print(target_distribution)
+print("Target class distribution (%):")
+print(target_distribution/sum(target_distribution)*100)
+```
+```{r}
+# Step 3: Perform balancing
+if (BALANCE){
+  balanced_train_cl1 <- data.frame()
+  for (class in names(class_distribution)) {
+    class_data <- train[train$CLC1N == class, ]
+    target_size <- target_distribution[as.numeric(class)]
+    
+    if (nrow(class_data) > target_size) {
+      # Undersample majority class
+      sampled_data <- class_data[sample(1:nrow(class_data), target_size), ]
+    } else {
+      # Oversample minority classes
+      sampled_data <- class_data
+      remaining_size <- target_size - nrow(sampled_data)
+      additional_data <- class_data[sample(1:nrow(class_data), size = remaining_size, replace = TRUE), ]
+      sampled_data <- rbind(sampled_data, additional_data)
+    }
+    
+    balanced_train_cl1 <- rbind(balanced_train_cl1, sampled_data)
+  }
+  train <- balanced_train_cl1
+}
+
+# Check new distribution
+print("Balanced class distribution:")
+print(table(train$CLC1N))
+```
+
+```{r}
+X_train <- train[, -c(ncol(train))]
+y_train <- train[[ncol(train)]]
+y_train <- factor(y_train)
+is.factor(y_train)
+
+X_test <- test[, -c(ncol(test))]
+y_test <- test[[ncol(test)]]
+y_test <- factor(y_test)
+is.factor(y_test)
+```
+
+```{r}
+table(y_train)
+table(y_test)
+```
+## Discriminant Analysis
+
+### LDA
+
+#### Model
+
+```{r}
+lda_model <- train(
+  x = X_train, 
+  y = y_train,
+  method = "lda"
+)
+```
+
+```{r}
+lda_predictions_train <- predict(lda_model, newdata = X_train)
+lda_predictions_test <- predict(lda_model, newdata = X_test)
+
+lda_predictions_train_confusion_matrix <- confusionMatrix(data = lda_predictions_train, reference = y_train)
+lda_predictions_test_confusion_matrix <- confusionMatrix(data = lda_predictions_test, reference = y_test)
+
+cat("Accuracy train: ", lda_predictions_train_confusion_matrix$overall["Accuracy"], "\n")
+cat("Accuracy test: ", lda_predictions_test_confusion_matrix$overall["Accuracy"], "\n")
+```
+
+#### Confusion Matrices
+
+```{r}
+# For the training confusion matrix
+train_plot <- ggplot(data = as.data.frame(lda_predictions_train_confusion_matrix$table), 
+                     aes(x = Prediction, y = Reference)) +
+    geom_tile(aes(fill = Freq), color = "white") +
+    scale_fill_gradient(low = "red", high = "yellow") +
+    geom_text(aes(label = Freq), vjust = 1, size = 5) +  # Increase size of text labels
+    labs(title = "Confusion Matrix - Train", x = "Predicted", y = "Real") +
+    theme_minimal() +
+    theme(
+        plot.title = element_text(size = 20),  # Increase title size
+        axis.title.x = element_text(size = 15),  # Increase x-axis title size
+        axis.title.y = element_text(size = 15),  # Increase y-axis title size
+        axis.text.x = element_text(size = 12),  # Increase x-axis text size
+        axis.text.y = element_text(size = 12)   # Increase y-axis text size
+    )
+
+ggplotly(train_plot)
+
+# For the testing confusion matrix
+test_plot <- ggplot(data = as.data.frame(lda_predictions_test_confusion_matrix$table), 
+                    aes(x = Prediction, y = Reference)) +
+    geom_tile(aes(fill = Freq), color = "white") +
+    scale_fill_gradient(low = "red", high = "yellow") +
+    geom_text(aes(label = Freq), vjust = 1, size = 5) +  # Increase size of text labels
+    labs(title = "Confusion Matrix - Test", x = "Predicted", y = "Real") +
+    theme_minimal() +
+    theme(
+        plot.title = element_text(size = 20),  # Increase title size
+        axis.title.x = element_text(size = 15),  # Increase x-axis title size
+        axis.title.y = element_text(size = 15),  # Increase y-axis title size
+        axis.text.x = element_text(size = 12),  # Increase x-axis text size
+        axis.text.y = element_text(size = 12)   # Increase y-axis text size
+    )
+
+ggplotly(test_plot)
+```
+
+#### Metrics
+
+```{r}
+# ----------- TRAIN ----------------
+
+# Extract class-wise metrics
+class_metrics_train <- as.data.frame(lda_predictions_train_confusion_matrix$byClass)
+class_metrics_train$Class <- rownames(class_metrics_train)
+
+
+# Extract overall metrics
+overall_metrics_train <- data.frame(
+  Metric = names(lda_predictions_train_confusion_matrix$overall),
+  Value = lda_predictions_train_confusion_matrix$overall
+)
+
+# Class-wise metrics table
+kable(
+  class_metrics_train, 
+  format = "html", 
+  digits = 3, 
+  caption = "Class-wise Metrics for Train Data"
+)
+
+# Overall metrics table
+kable(
+  overall_metrics_train, 
+  format = "html", 
+  digits = 3, 
+  caption = "Overall Metrics for Train Data"
+)
+
+# ----------- TEST ----------------
+
+class_metrics_test <- as.data.frame(lda_predictions_test_confusion_matrix$byClass)
+class_metrics_test$Class <- rownames(class_metrics_test)
+
+# Extract overall metrics
+overall_metrics_test <- data.frame(
+  Metric = names(lda_predictions_test_confusion_matrix$overall),
+  Value = lda_predictions_test_confusion_matrix$overall
+)
+
+# Class-wise metrics table
+kable(
+  class_metrics_test, 
+  format = "html", 
+  digits = 3, 
+  caption = "Class-wise Metrics for Test Data"
+)
+
+# Overall metrics table
+kable(
+  overall_metrics_test, 
+  format = "html", 
+  digits = 3, 
+  caption = "Overall Metrics for Test Data"
+)
+```
+#### Projecting Data into the First Two LDA Directions
+
+```{r}
+# Get the LDA coefficients
+lda_coefficients <- lda_model$finalModel$scaling
+
+# Project the test data onto the LDA directions
+lda_test <- as.matrix(X_test) %*% lda_coefficients
+
+# Create a data frame with the LDA coordinates and the actual labels
+lda_test_df <- data.frame(lda1 = lda_test[, 1],  # First LDA direction
+                          lda2 = lda_test[, 2],  # Second LDA direction
+                          Class = y_test)  # Actual labels
+```
+
+
+```{r}
+# Plot the test data in the LDA space
+lda_plot <- ggplotly(ggplot(lda_test_df, aes(x = lda1, y = lda2, color = Class)) +
+    geom_point(size = 3) +
+    labs(title = "LDA of Test Data", x = "LDA 1", y = "LDA 2") +
+    theme_minimal() +
+    theme(
+        plot.title = element_text(size = 20),
+        axis.title.x = element_text(size = 15),
+        axis.title.y = element_text(size = 15),
+        axis.text.x = element_text(size = 12),
+        axis.text.y = element_text(size = 12)
+    ))
+
+lda_plot
+```
+
+
+
+
+#### Class Map
+
+```{r}
+validation <- as.data.table(validation)
+```
+
+Using a dataset with 500 observations (100 of each class)
+
+```{r}
+small_validation <- validation[, .SD[sample(.N, 100)], by = CLC1N] 
+
+small_validation[c(1,100,101,200,201,300,301,400,401),]
+```
+
+```{r}
+y_validation <- small_validation[, CLC1N]
+X_validation <- small_validation[, !("CLC1N"), with = FALSE]
+```
+
+##### Probabilities of Alternative Class (PAC)
+
+```{r}
+# Predict the class labels and posterior probabilities
+class_predictions_val <- predict(lda_model, newdata = X_validation, type = "raw")
+posterior_val <- predict(lda_model, newdata = X_validation, type = "prob")
+
+# Extract the true class labels from y_test (assuming y_test is the true labels)
+true_class <- y_validation
+
+# Initialize a data frame to store the results
+result_df <- data.frame(
+  TrueClass = true_class,
+  PredictedClass = class_predictions_val,
+  SecondHighestClass = NA,
+  PosteriorTrueClass = NA,
+  PosteriorPredictedClass = NA,
+  SecondHighestPosterior = NA
+)
+
+head(result_df)
+```
+
+```{r}
+for (i in 1:nrow(posterior_val)) {
+  
+  # Get the posterior probabilities for the i-th observation
+  posteriors <- as.matrix(posterior_val[i, ])
+  #print(posteriors)
+  
+  max_posterior <- max(posteriors)
+  #print(max_posterior)
+  max_posterior_index <- which.max(posteriors)
+  #print(max_posterior_index)
+  
+  second_posterior <- max(posteriors[posteriors != max_posterior])
+  #print(second_posterior)
+  second_posterior_index <- which(posteriors == second_posterior)[1]
+  #print(second_posterior_index)
+  
+  true_class_posterior <- posteriors[y_validation[i]]
+  #print(y_validation[i])
+  #print(true_class_posterior)
+  
+  # Assign values to the result data frame
+  result_df$SecondHighestClass[i] <- second_posterior_index
+  result_df$PosteriorTrueClass[i] <- true_class_posterior
+  result_df$PosteriorPredictedClass[i] <- max_posterior
+  result_df$SecondHighestPosterior[i] <- second_posterior
+}
+
+head(result_df)
+```
+
+```{r}
+# Calculate PAC for each observation
+result_df$PAC <- with(result_df, {
+  # Get the posterior of the true class
+  true_class_posterior <- PosteriorTrueClass
+  
+  # Get the highest posterior not including the true class
+  highest_posterior <- ifelse(TrueClass == PredictedClass, 
+                               SecondHighestPosterior, 
+                               PosteriorPredictedClass)
+  
+  # Calculate PAC
+  PAC_value <- highest_posterior / (highest_posterior + true_class_posterior)
+  
+  return(PAC_value)
+})
+head(result_df)
+```
+
+##### Farness
+
+```{r}
+class_means <-  lda_model[["finalModel"]][["means"]]
+
+train_data_split <- split(lda_model[["trainingData"]], lda_model[["trainingData"]][[".outcome"]])
+```
+
+```{r}
+cov_matrices <- list()
+
+# Loop through each class and compute the covariance matrix
+for (class in names(train_data_split)) {
+  # Extract the data for the current class
+  class_data <- train_data_split[[class]]
+  
+  # Remove the outcome column if it exists (assuming it's the last column)
+  class_data <- class_data[, -which(names(class_data) == ".outcome")]
+  
+  # Compute the covariance matrix for the current class
+  cov_matrix <- cov(class_data)
+  
+  # Store the covariance matrix in the list
+  cov_matrices[[class]] <- cov_matrix
+}
+```
+
+```{r}
+# Step 3: Calculate Mahalanobis distance for each observation
+mahalanobis_distances <- sapply(1:nrow(X_validation), function(i) {
+  class <- y_validation[i]
+  mean_vector <- class_means[class, ]
+  cov_matrix <- cov_matrices[[class]]  # Use the covariance matrix for the specific class
+  # Calculate the squared Mahalanobis distance
+  squared_distance <- mahalanobis(X_validation[i, ], mean_vector, cov_matrix)
+  # Return the unsquared distance
+  sqrt(squared_distance)  # Take the square root to get the unsquared distance
+})
+```
+
+```{r}
+# Step 4: Calculate farness for each observation
+farness <- sapply(1:nrow(X_validation), function(i) {
+  class <- y_validation[i]
+  cov_matrix <- cov_matrices[[class]]  # Use the covariance matrix for the specific class
+  
+  # Get the Mahalanobis distance for the current observation
+  D_i_gi <- mahalanobis_distances[i]  # This is the unsquared Mahalanobis distance
+  
+  # Calculate the CDF value for the squared Mahalanobis distance
+  # The squared Mahalanobis distance follows a Chi-squared distribution
+  # with degrees of freedom equal to the number of features
+  df <- ncol(X_validation)  # Number of features
+  cdf_value <- pchisq(D_i_gi^2, df)  # CDF of Chi-squared distribution
+  
+  return(cdf_value)
+})
+```
+
+```{r}
+result_df$farness <- farness
+```
+
+```{r}
+final_results <- result_df[, c("TrueClass", "PredictedClass", "PAC", "farness")]
+head(final_results)
+```
+
+##### Graphics
+
+```{r}
+# Create a list of unique classes
+unique_classes <- unique(final_results$TrueClass)
+
+# Define the offset value
+offset_value <- 0.99
+
+# Loop through each class and create a plot
+for (class in unique_classes) {
+  # Filter the data for the current class
+  class_data <- final_results %>% filter(TrueClass == class)
+  
+  # Create the plot
+  p <- ggplot(class_data, aes(x = farness, y = PAC, color = PredictedClass)) +
+    geom_point(size = 3) +  # Points for each observation
+    geom_hline(yintercept = 0.5, linetype = "dashed", color = "red") +  # Horizontal line at PAC = 0.5
+    geom_vline(xintercept = offset_value, linetype = "dashed", color = "black") +  # Vertical line at the offset value
+    labs(title = paste("Class:", class),
+         x = "Farness",
+         y = "PAC",
+         color = "Predicted Class") +
+    scale_y_continuous(limits = c(0, 1), breaks = seq(0, 1, by = 0.2)) +  # Set y-axis limits from 0 to 1
+    theme_minimal() +  # Use a minimal theme
+    theme(legend.position = "right") +  # Position the legend
+    # Highlight points with farness greater than the offset value and well predicted
+    geom_point(data = class_data %>% filter(farness > offset_value & PredictedClass == TrueClass), 
+               aes(x = farness, y = PAC), 
+               size = 5, shape = 1, color = "black")  # Circle points with larger size and different color
+
+  # Convert ggplot to an interactive plotly plot
+  p_interactive <- ggplotly(p)
+
+  # Print the interactive plot
+  print(p_interactive)
+}
+```
+
+### QDA
+
+#### Model
+
+```{r}
+qda_model <- train(
+  x = X_train, 
+  y = y_train,
+  method = "qda"
+)
+```
+
+```{r}
+qda_predictions_train <- predict(qda_model, newdata = X_train)
+qda_predictions_test <- predict(qda_model, newdata = X_test)
+
+qda_predictions_train_confusion_matrix <- confusionMatrix(data = qda_predictions_train, reference = y_train)
+qda_predictions_test_confusion_matrix <- confusionMatrix(data = qda_predictions_test, reference = y_test)
+
+cat("Accuracy train: ", qda_predictions_train_confusion_matrix$overall["Accuracy"], "\n")
+cat("Accuracy test: ", qda_predictions_test_confusion_matrix$overall["Accuracy"], "\n")
+```
+
+#### Confusion Matrices
+
+```{r}
+# For the training confusion matrix
+train_plot <- ggplot(data = as.data.frame(qda_predictions_train_confusion_matrix$table), 
+                     aes(x = Prediction, y = Reference)) +
+    geom_tile(aes(fill = Freq), color = "white") +
+    scale_fill_gradient(low = "red", high = "yellow") +
+    geom_text(aes(label = Freq), vjust = 1, size = 5) +  # Increase size of text labels
+    labs(title = "Confusion Matrix - Train", x = "Predicted", y = "Real") +
+    theme_minimal() +
+    theme(
+        plot.title = element_text(size = 20),  # Increase title size
+        axis.title.x = element_text(size = 15),  # Increase x-axis title size
+        axis.title.y = element_text(size = 15),  # Increase y-axis title size
+        axis.text.x = element_text(size = 12),  # Increase x-axis text size
+        axis.text.y = element_text(size = 12)   # Increase y-axis text size
+    )
+
+ggplotly(train_plot)
+
+# For the testing confusion matrix
+test_plot <- ggplot(data = as.data.frame(qda_predictions_test_confusion_matrix$table), 
+                    aes(x = Prediction, y = Reference)) +
+    geom_tile(aes(fill = Freq), color = "white") +
+    scale_fill_gradient(low = "red", high = "yellow") +
+    geom_text(aes(label = Freq), vjust = 1, size = 5) +  # Increase size of text labels
+    labs(title = "Confusion Matrix - Test", x = "Predicted", y = "Real") +
+    theme_minimal() +
+    theme(
+        plot.title = element_text(size = 20),  # Increase title size
+        axis.title.x = element_text(size = 15),  # Increase x-axis title size
+        axis.title.y = element_text(size = 15),  # Increase y-axis title size
+        axis.text.x = element_text(size = 12),  # Increase x-axis text size
+        axis.text.y = element_text(size = 12)   # Increase y-axis text size
+    )
+
+ggplotly(test_plot)
+```
+
+#### Metrics
+
+```{r}
+# ----------- TRAIN ----------------
+
+# Extract class-wise metrics
+class_metrics_train <- as.data.frame(qda_predictions_train_confusion_matrix$byClass)
+class_metrics_train$Class <- rownames(class_metrics_train)
+
+
+# Extract overall metrics
+overall_metrics_train <- data.frame(
+  Metric = names(qda_predictions_train_confusion_matrix$overall),
+  Value = qda_predictions_train_confusion_matrix$overall
+)
+
+# Class-wise metrics table
+kable(
+  class_metrics_train, 
+  format = "html", 
+  digits = 3, 
+  caption = "Class-wise Metrics for Train Data"
+)
+
+# Overall metrics table
+kable(
+  overall_metrics_train, 
+  format = "html", 
+  digits = 3, 
+  caption = "Overall Metrics for Train Data"
+)
+
+# ----------- TEST ----------------
+
+class_metrics_test <- as.data.frame(qda_predictions_test_confusion_matrix$byClass)
+class_metrics_test$Class <- rownames(class_metrics_test)
+
+# Extract overall metrics
+overall_metrics_test <- data.frame(
+  Metric = names(qda_predictions_test_confusion_matrix$overall),
+  Value = qda_predictions_test_confusion_matrix$overall
+)
+
+# Class-wise metrics table
+kable(
+  class_metrics_test, 
+  format = "html", 
+  digits = 3, 
+  caption = "Class-wise Metrics for Test Data"
+)
+
+# Overall metrics table
+kable(
+  overall_metrics_test, 
+  format = "html", 
+  digits = 3, 
+  caption = "Overall Metrics for Test Data"
+)
+```
+
+#### Class Map
+
+```{r}
+validation <- as.data.table(validation)
+```
+
+Using a dataset with 500 observations (100 of each class)
+
+```{r}
+small_validation <- validation[, .SD[sample(.N, 100)], by = CLC1N] 
+
+small_validation[c(1,100,101,200,201,300,301,400,401),]
+```
+
+```{r}
+y_validation <- small_validation[, CLC1N]
+X_validation <- small_validation[, !("CLC1N"), with = FALSE]
+```
+
+##### Probabilities of Alternative Class (PAC)
+
+```{r}
+# Predict the class labels and posterior probabilities
+class_predictions_val <- predict(qda_model, newdata = X_validation, type = "raw")
+posterior_val <- predict(qda_model, newdata = X_validation, type = "prob")
+
+# Extract the true class labels from y_test (assuming y_test is the true labels)
+true_class <- y_validation
+
+# Initialize a data frame to store the results
+result_df <- data.frame(
+  TrueClass = true_class,
+  PredictedClass = class_predictions_val,
+  SecondHighestClass = NA,
+  PosteriorTrueClass = NA,
+  PosteriorPredictedClass = NA,
+  SecondHighestPosterior = NA
+)
+
+head(result_df)
+```
+
+```{r}
+for (i in 1:nrow(posterior_val)) {
+  
+  # Get the posterior probabilities for the i-th observation
+  posteriors <- as.matrix(posterior_val[i, ])
+  #print(posteriors)
+  
+  max_posterior <- max(posteriors)
+  #print(max_posterior)
+  max_posterior_index <- which.max(posteriors)
+  #print(max_posterior_index)
+  
+  second_posterior <- max(posteriors[posteriors != max_posterior])
+  #print(second_posterior)
+  second_posterior_index <- which(posteriors == second_posterior)[1]
+  #print(second_posterior_index)
+  
+  true_class_posterior <- posteriors[y_validation[i]]
+  #print(y_validation[i])
+  #print(true_class_posterior)
+  
+  # Assign values to the result data frame
+  result_df$SecondHighestClass[i] <- second_posterior_index
+  result_df$PosteriorTrueClass[i] <- true_class_posterior
+  result_df$PosteriorPredictedClass[i] <- max_posterior
+  result_df$SecondHighestPosterior[i] <- second_posterior
+}
+
+head(result_df)
+```
+
+```{r}
+# Calculate PAC for each observation
+result_df$PAC <- with(result_df, {
+  # Get the posterior of the true class
+  true_class_posterior <- PosteriorTrueClass
+  print('true_class_posterior = ')
+  print(true_class_posterior)
+  
+  # Get the highest posterior not including the true class
+  highest_posterior <- ifelse(TrueClass == PredictedClass, 
+                               SecondHighestPosterior, 
+                               PosteriorPredictedClass)
+  
+  # Calculate PAC
+  print('highest_posterior = ')
+  print(highest_posterior)
+  PAC_value <- highest_posterior / (highest_posterior + true_class_posterior)
+  
+  return(PAC_value)
+})
+head(result_df)
+```
+
+##### Farness
+
+```{r}
+class_means <-  qda_model[["finalModel"]][["means"]]
+
+train_data_split <- split(qda_model[["trainingData"]], qda_model[["trainingData"]][[".outcome"]])
+```
+
+```{r}
+cov_matrices <- list()
+
+# Loop through each class and compute the covariance matrix
+for (class in names(train_data_split)) {
+  # Extract the data for the current class
+  class_data <- train_data_split[[class]]
+  
+  # Remove the outcome column if it exists (assuming it's the last column)
+  class_data <- class_data[, -which(names(class_data) == ".outcome")]
+  
+  # Compute the covariance matrix for the current class
+  cov_matrix <- cov(class_data)
+  
+  # Store the covariance matrix in the list
+  cov_matrices[[class]] <- cov_matrix
+}
+
+```
+
+```{r}
+# Step 3: Calculate Mahalanobis distance for each observation
+mahalanobis_distances <- sapply(1:nrow(X_validation), function(i) {
+  class <- y_validation[i]
+  mean_vector <- class_means[class, ]
+  cov_matrix <- cov_matrices[[class]]  # Use the covariance matrix for the specific class
+  # Calculate the squared Mahalanobis distance
+  squared_distance <- mahalanobis(X_validation[i, ], mean_vector, cov_matrix)
+  # Return the unsquared distance
+  sqrt(squared_distance)  # Take the square root to get the unsquared distance
+})
+```
+
+```{r}
+# Step 4: Calculate farness for each observation
+farness <- sapply(1:nrow(X_validation), function(i) {
+  class <- y_validation[i]
+  cov_matrix <- cov_matrices[[class]]  # Use the covariance matrix for the specific class
+  
+  # Get the Mahalanobis distance for the current observation
+  D_i_gi <- mahalanobis_distances[i]  # This is the unsquared Mahalanobis distance
+  
+  # Calculate the CDF value for the squared Mahalanobis distance
+  # The squared Mahalanobis distance follows a Chi-squared distribution
+  # with degrees of freedom equal to the number of features
+  df <- ncol(X_validation)  # Number of features
+  cdf_value <- pchisq(D_i_gi^2, df)  # CDF of Chi-squared distribution
+  
+  return(cdf_value)
+})
+```
+
+```{r}
+# Combine results into a data frame
+result_df$farness <- farness
+```
+
+```{r}
+final_results <- result_df[, c("TrueClass", "PredictedClass", "PAC", "farness")]
+head(final_results)
+```
+
+##### Graphics
+
+```{r}
+# Create a list of unique classes
+unique_classes <- unique(final_results$TrueClass)
+
+# Define the offset value
+offset_value <- 0.99
+
+# Loop through each class and create a plot
+for (class in unique_classes) {
+  # Filter the data for the current class
+  class_data <- final_results %>% filter(TrueClass == class)
+  
+  # Create the plot
+  p <- ggplot(class_data, aes(x = farness, y = PAC, color = PredictedClass)) +
+    geom_point(size = 3) +  # Points for each observation
+    geom_hline(yintercept = 0.5, linetype = "dashed", color = "red") +  # Horizontal line at PAC = 0.5
+    geom_vline(xintercept = offset_value, linetype = "dashed", color = "black") +  # Vertical line at the offset value
+    labs(title = paste("Class:", class),
+         x = "Farness",
+         y = "PAC",
+         color = "Predicted Class") +
+    scale_y_continuous(limits = c(0, 1), breaks = seq(0, 1, by = 0.2)) +  # Set y-axis limits from 0 to 1
+    theme_minimal() +  # Use a minimal theme
+    theme(legend.position = "right") +  # Position the legend
+    # Highlight points with farness greater than the offset value and well predicted
+    geom_point(data = class_data %>% filter(farness > offset_value & PredictedClass == TrueClass), 
+               aes(x = farness, y = PAC), 
+               size = 5, shape = 1, color = "black")  # Circle points with larger size and different color
+
+  # Convert ggplot to an interactive plotly plot
+  p_interactive <- ggplotly(p)
+
+  # Print the interactive plot
+  print(p_interactive)
+}
+```
+
+### FDA
+
+#### Model
+
+```{r}
+B= cov.B(X_train, y_train)
+W= cov.W(X_train, y_train)
+
+fda_X_train_eig <- eigen(solve(W)%*% B)
+round(fda_X_train_eig$values,2)
+```
+
+```{r}
+V <- fda_X_train_eig$vectors
+Z_train <- as.matrix(X_train) %*% V
+```
+
+```{r}
+class_means <- aggregate(Z_train, by = list(y_train), FUN = mean)
+colnames(class_means)[1] <- "CLC1N"
+
+print(class_means)
+```
+
+```{r}
+Z_test <- as.matrix(X_test) %*% V
+
+fda_predictions_test <- apply(Z_test, 1, function(row) {
+  distances <- apply(class_means[, -1], 1, function(mean) sum((row - mean)^2))
+  class_means[which.min(distances), "CLC1N"]
+})
+
+fda_predictions_train <- apply(Z_train, 1, function(row) {
+  distances <- apply(class_means[, -1], 1, function(mean) sum((row - mean)^2))
+  class_means[which.min(distances), "CLC1N"]
+})
+```
+
+```{r}
+fda_predictions_train_confusion_matrix <- confusionMatrix(data = fda_predictions_train, reference = y_train)
+fda_predictions_test_confusion_matrix <- confusionMatrix(data = fda_predictions_test, reference = y_test)
+
+cat("Accuracy train: ", fda_predictions_train_confusion_matrix$overall["Accuracy"], "\n")
+cat("Accuracy test: ", fda_predictions_test_confusion_matrix$overall["Accuracy"], "\n")
+```
+
+#### Confusion Matrices
+
+```{r}
+# For the training confusion matrix
+train_plot <- ggplot(data = as.data.frame(fda_predictions_train_confusion_matrix$table), 
+                     aes(x = Prediction, y = Reference)) +
+    geom_tile(aes(fill = Freq), color = "white") +
+    scale_fill_gradient(low = "red", high = "yellow") +
+    geom_text(aes(label = Freq), vjust = 1, size = 5) +  # Increase size of text labels
+    labs(title = "Confusion Matrix - Train", x = "Predicted", y = "Real") +
+    theme_minimal() +
+    theme(
+        plot.title = element_text(size = 20),  # Increase title size
+        axis.title.x = element_text(size = 15),  # Increase x-axis title size
+        axis.title.y = element_text(size = 15),  # Increase y-axis title size
+        axis.text.x = element_text(size = 12),  # Increase x-axis text size
+        axis.text.y = element_text(size = 12)   # Increase y-axis text size
+    )
+
+ggplotly(train_plot)
+
+# For the testing confusion matrix
+test_plot <- ggplot(data = as.data.frame(fda_predictions_test_confusion_matrix$table), 
+                    aes(x = Prediction, y = Reference)) +
+    geom_tile(aes(fill = Freq), color = "white") +
+    scale_fill_gradient(low = "red", high = "yellow") +
+    geom_text(aes(label = Freq), vjust = 1, size = 5) +  # Increase size of text labels
+    labs(title = "Confusion Matrix - Test", x = "Predicted", y = "Real") +
+    theme_minimal() +
+    theme(
+        plot.title = element_text(size = 20),  # Increase title size
+        axis.title.x = element_text(size = 15),  # Increase x-axis title size
+        axis.title.y = element_text(size = 15),  # Increase y-axis title size
+        axis.text.x = element_text(size = 12),  # Increase x-axis text size
+        axis.text.y = element_text(size = 12)   # Increase y-axis text size
+    )
+
+ggplotly(test_plot)
+```
+
+#### Metrics
+
+```{r}
+# ----------- TRAIN ----------------
+
+# Extract class-wise metrics
+class_metrics_train <- as.data.frame(fda_predictions_train_confusion_matrix$byClass)
+class_metrics_train$Class <- rownames(class_metrics_train)
+
+
+# Extract overall metrics
+overall_metrics_train <- data.frame(
+  Metric = names(fda_predictions_train_confusion_matrix$overall),
+  Value = fda_predictions_train_confusion_matrix$overall
+)
+
+# Class-wise metrics table
+kable(
+  class_metrics_train, 
+  format = "html", 
+  digits = 3, 
+  caption = "Class-wise Metrics for Train Data"
+)
+
+# Overall metrics table
+kable(
+  overall_metrics_train, 
+  format = "html", 
+  digits = 3, 
+  caption = "Overall Metrics for Train Data"
+)
+
+# ----------- TEST ----------------
+
+class_metrics_test <- as.data.frame(fda_predictions_test_confusion_matrix$byClass)
+class_metrics_test$Class <- rownames(class_metrics_test)
+
+# Extract overall metrics
+overall_metrics_test <- data.frame(
+  Metric = names(fda_predictions_test_confusion_matrix$overall),
+  Value = fda_predictions_test_confusion_matrix$overall
+)
+
+# Class-wise metrics table
+kable(
+  class_metrics_test, 
+  format = "html", 
+  digits = 3, 
+  caption = "Class-wise Metrics for Test Data"
+)
+
+# Overall metrics table
+kable(
+  overall_metrics_test, 
+  format = "html", 
+  digits = 3, 
+  caption = "Overall Metrics for Test Data"
+)
+```

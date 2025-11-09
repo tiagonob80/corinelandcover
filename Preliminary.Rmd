@@ -1,0 +1,340 @@
+---
+title: "AM Project. Part I - Preliminar analysis"
+author: Tiago Nóbrega(ist1103863)
+
+---
+
+In this section, a preliminary analysis of the dataset will be conducted. The dataset has been previously sampled, resulting in about 109,000 observations. The objective of this analysis is to explore the general characteristics of the dataset, understand the distribution of variables, and identify potential challenges, such as class imbalance, the presence of outliers, and feature redundancies. This initial step is crucial to guide the subsequent phases of the project, ensuring a better understanding of the data and an appropriate approach for the classification task.
+
+```{r}
+library(tidyverse)
+library(ggcorrplot)
+library(reshape2)
+library(plotrix)
+library(treemapify)
+library(nortest)
+library(caret)
+library(e1071)
+library(isotree)
+library(rsample)
+library(dplyr)
+library(reshape2)
+set.seed(42)
+```
+
+```{r}
+data <- read.csv("dataset_completo_26_12.csv")
+colnames(data) <- gsub("_rho_top", "", colnames(data))
+head(data)       
+```
+
+First, we take a look at the features mean, median and variance values.
+
+```{r}
+## Compute the values
+
+features <- data %>% select(3:15)
+
+# Variance
+variance_stats <- features %>%
+  summarise(across(everything(), var)) %>%
+  pivot_longer(cols = everything(), names_to = "Feature", values_to = "Variance")
+
+# Mean and median
+mean_stats <- features %>%
+  summarise(across(everything(), mean)) %>%
+  pivot_longer(cols = everything(), names_to = "Feature", values_to = "Mean")
+
+median_stats <- features %>%
+  summarise(across(everything(), median)) %>%
+  pivot_longer(cols = everything(), names_to = "Feature", values_to = "Median")
+
+mean_median_stats <- mean_stats %>%
+  left_join(median_stats, by = "Feature") %>%
+  pivot_longer(cols = c(Mean, Median), names_to = "Statistic", values_to = "Value")
+
+```
+
+
+```{r}
+##Plot the results
+
+ggplot(mean_median_stats, aes(x = Feature, y = Value, fill = Statistic)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(
+    title = "Features Mean and Median",
+    x = "Features",
+    y = "Value",
+    fill = "Statistic"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+ggplot(variance_stats, aes(x = Feature, y = Variance)) +
+  geom_bar(stat = "identity", position = "dodge", color = "black", fill = "#fbded4") + 
+  labs(
+    title = "Features Variance",
+    x = "Features",
+    y = "Variance"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+```
+The analysis of the mean and median values across the features reveals that most features exhibit similar mean and median values, indicating relatively symmetric distributions. Features from M10 to M14 exhibit slightly higher mean and median values compared to the others, indicating these features might have a more pronounced contribution in terms of magnitude. 
+
+The variance plot shows relatively uniform variance across most features, with a gradual increase observed from M01 to M14. The last two features stand out with the highest variance, indicating greater spread in their values. 
+
+```{r}
+# Create features boxplot
+features_long <- features %>% 
+  pivot_longer(cols = everything(), names_to = "Feature", values_to = "Value")
+ggplot(features_long, aes(x = Feature, y = Value)) +
+  geom_boxplot(fill = "#fbded4", outlier.shape = NA) 
+  labs(
+    title = "Features Boxplot",
+    x = "Feature",
+    y = "Value"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1)
+  )
+```
+From the boxplot above, we observe two distinct ranges across the features. The first range spans from M01 to M09, where the values are relatively lower and more tightly distributed. The second range, which includes features M10 to M14, exhibits larger values in absolute terms, confirming these features' greater variability and a higher magnitude. The interquartile range within the first group (M01 to M09) is more consistent and compact, ranging from 0.06 to about 0.23. The second group's quartiles range from 0.15 to 0.32.
+
+Next, we will visualize the features in order to visually assess patterns and tendencies.
+```{r}
+# Create features histograms
+ggplot(features_long, aes(x = Value)) +
+  geom_histogram(bins = 30, color = "black", fill = "blue", alpha = 0.7) +
+  facet_wrap(~ Feature, scales = "free", ncol = 4) +
+  labs(
+    title = "Features Histogram",
+    x = "Value",
+    y = "Frequency"
+  ) +
+  theme_minimal()
+```
+We can, once again, split the features in two main groups based on their distribution. From M01 to M10, the distributions are highly asymmetric, showing a long tail to the right(right-skewed). The plots coming from these features do not resemble a normal distribution. The features M10 to M14 show a more symmetric curve, although they are still slightly right-skewed. 
+
+```{r}
+# Compute and plot Correlation Matrix
+
+colnames(features) <- gsub("_radiance", "", colnames(features))
+
+cor_matrix <- cor(features, use = "complete.obs")
+
+ggcorrplot(cor_matrix, 
+           method = "square", 
+           type = "lower", 
+           lab = TRUE, 
+           lab_size = 3, 
+           colors = c("blue", "white", "red"), 
+           title = "Correlation Matrix",
+           tl.cex = 10, 
+           show.legend = FALSE
+) +
+  theme_minimal() +
+  theme(
+    axis.title.x = element_blank(), 
+    axis.title.y = element_blank()  
+  )
+
+```
+The correlation matrix shows high values among the 13 features, indicating a strong linear relationship between the variables. Again, there is a separation between the two groups of features, with the bands from M01 to M09 exhibiting almost perfect correlations with each other(values nearing 1) and the bands M10 to M14 showing slightly lower but still significant correlations, with values ranging between 0.79 and 0.99. This distinction suggests that the features in the first group (M01 to M09) are more homogeneous and may carry redundant information, while the second group (M10 to M14) shows slightly more variability, potentially capturing different patterns in the data. This separation shows the possibility of considering dimensionality reduction techniques to simplify the dataset without losing critical information.
+
+```{r}
+## Compute and plot Covariance Matrix
+
+cov_matrix <- cov(features, use = "complete.obs")
+cov_matrix[upper.tri(cov_matrix)] <- NA
+
+cov_matrix_long <- melt(cov_matrix) %>%
+  mutate(value = ifelse(is.na(value), 0, value))
+
+ggplot(cov_matrix_long, aes(Var1, Var2, fill = value)) +
+  geom_tile(color = "grey90") + 
+  geom_text(aes(label = ifelse(value == 0, "", round(value, 4))), size = 3) + 
+  scale_fill_gradient2(
+    low = "blue", high = "red", mid = "white", midpoint = 0,
+    name = "Covariance"
+  ) +
+  labs(
+    title = "Covariance Matrix Heatmap",
+    x = "Features",
+    y = "Features"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    panel.grid.major = element_line(color = "grey90"),  
+    panel.grid.minor = element_blank()
+  )
+
+
+```
+
+Next, we will visualize the distribution of each class, in the first two layers of classes:
+```{r}
+## Create pie chart to visualize distribution of the first layer
+counts_layer1 <- table(data$CLC1N)
+percentages_layer1 <- round(100 * counts_layer1 / sum(counts_layer1), 1)
+labels_layer1 <- paste0(names(counts_layer1), " (", percentages_layer1, "%)")
+
+pie(
+  table(data$CLC1N),
+  labels = labels_layer1,
+  main = "CLC1N Values"
+)
+```
+The first layer of classification contains 5 classes, so it can be represented as in the above pie chart. It's clear that imbalance is present in this layer. The next layer contains more classes, so we use a horizontal bar plot to view them:
+
+```{r}
+# Check distribution of the second layer
+clc2n_distribution <- data %>%
+  count(CLC2N) %>%
+  mutate(
+    percentage = round(100 * n / sum(n), 1),
+    group = case_when(
+      CLC2N %in% c("24", "21", "22", "23") ~ "CLC1N = 2",
+      CLC2N %in% c("32", "31", "33") ~ "CLC1N = 3",
+      CLC2N %in% c("11", "12", "13", "14") ~ "CLC1N = 1",
+      CLC2N %in% c("41", "42", "43") ~ "CLC1N = 4",
+      CLC2N %in% c("51", "52") ~ "CLC1N = 5",
+      TRUE ~ "Others"
+    )
+  ) %>%
+  arrange(desc(n))
+
+group_colors <- c(
+  "CLC1N = 1" = "#1b9e77",
+  "CLC1N = 2" = "#d95f02",
+  "CLC1N = 3" = "#7570b3",
+  "CLC1N = 4" = "#e7298a",
+  "CLC1N = 5" = "#66a61e"
+)
+
+ggplot(clc2n_distribution, aes(x = reorder(CLC2N, n), y = n, fill = group)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = paste0(percentage, "%")), 
+            hjust = -0.2, size = 3.5) +  
+  coord_flip() +  
+  labs(
+    title = "Horizontal Bar Plot of CLC2N Classes Grouped by CLC1N",
+    x = "Classes",
+    y = "Count",
+    fill = "Groups"
+  ) +
+  scale_fill_manual(values = group_colors) +  
+  theme_minimal() +
+  theme(
+    axis.text.y = element_text(size = 8),  
+    legend.position = "right"
+  ) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.2)))
+
+```
+
+The horizontal bar plot for CLC2N clearly demonstrates an imbalance in the distribution of classes. The target variable is skewed, with certain classes, such as forests and agricultural areas, being significantly more frequent, while others, like rare land types or urban areas, are underrepresented. This skewness reflects the natural distribution of land use and land cover, which will pose challenges for the classification models.
+
+
+Finally, we split the data into training, validation, and test sets, in order to use them to train and evaluate models. In this section, it is crucial to ensure that the split maintains the balance of the target variable's distribution
+
+```{r}
+# Split 70% training, 15% test, 15% validation
+split <- initial_split(data, prop = 0.7, strata = CLC1N)
+
+train_data <- training(split)
+remaining_data <- testing(split)
+
+split_remaining <- initial_split(remaining_data, prop = 0.5, strata = CLC1N)
+
+validation_data <- training(split_remaining)
+test_data <- testing(split_remaining)
+
+# Check sizes
+cat("Train set size:", nrow(train_data), "\n")
+cat("Validation set size:", nrow(validation_data), "\n")
+cat("Test set size:", nrow(test_data), "\n")
+
+cat("\nTraining set proportions (CLC1N):\n")
+print(prop.table(table(train_data$CLC1N)))
+
+cat("\nValidation set proportions (CLC1N):\n")
+print(prop.table(table(validation_data$CLC1N)))
+
+cat("\nTest set proportions (CLC1N):\n")
+print(prop.table(table(test_data$CLC1N)))
+
+```
+We can check the proportions in each set:
+
+```{r}
+train_proportions <- train_data %>%
+  count(CLC2N) %>%
+  mutate(percentage = n / sum(n) * 100, set = "Train")
+
+# Compute and plot proportions
+validation_proportions <- validation_data %>%
+  count(CLC2N) %>%
+  mutate(percentage = n / sum(n) * 100, set = "Validation")
+
+test_proportions <- test_data %>%
+  count(CLC2N) %>%
+  mutate(percentage = n / sum(n) * 100, set = "Test")
+
+all_proportions <- bind_rows(train_proportions, validation_proportions, test_proportions)
+
+ggplot(all_proportions, aes(x = reorder(CLC2N, -percentage), y = percentage, fill = set)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(
+    title = "CLC2N Proportions in each set",
+    x = "Classes (CLC2N)",
+    y = "Proportion (%)",
+    fill = "Set"
+  ) +
+  theme_minimal()
+```
+
+
+
+```{r}
+# Standardize data
+
+# Compute required values
+train_means <- colMeans(train_data[, 3:15], na.rm = TRUE)
+train_sds <- apply(train_data[, 3:15], 2, sd, na.rm = TRUE)
+
+# Standardize the training set
+train_data_standardized <- train_data %>%
+  mutate(across(3:15, ~ (. - train_means[cur_column()]) / train_sds[cur_column()]))
+
+# Standardize the test set using training set's mean and SD
+test_data_standardized <- test_data %>%
+  mutate(across(3:15, ~ (. - train_means[cur_column()]) / train_sds[cur_column()]))
+
+# Standardize the validation set using training set's mean and SD
+validation_data_standardized <- validation_data %>%
+  mutate(across(3:15, ~ (. - train_means[cur_column()]) / train_sds[cur_column()]))
+
+
+```
+```{r}
+# Write .csv files (non-standerdized)
+write.csv(train_data, "train_data.csv", row.names = FALSE)
+write.csv(validation_data, "validation_data.csv", row.names = FALSE)
+write.csv(test_data, "test_data.csv", row.names = FALSE)
+
+# Write .csv files (standerdized)
+write.csv(dataset_completo_26_12_standardized, "dataset_completo_26_12_standardized.csv", row.names = FALSE)
+write.csv(test_data_standardized, "test_data_standardized.csv", row.names = FALSE)
+write.csv(train_data_standardized, "train_data_standardized.csv", row.names = FALSE)
+write.csv(validation_data_standardized, "validation_data_standardized.csv", row.names = FALSE)
+
+```
+
+
+

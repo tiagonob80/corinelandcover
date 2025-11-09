@@ -1,0 +1,306 @@
+# Classification task
+
+```{r}
+# Libraries
+library(readr)
+library("gridExtra")
+library(ggplot2)
+library(plotly)
+library(tidyr)
+library(dplyr)
+library(caret)
+ library(naivebayes) #Bayes
+library(knitr)
+library(data.table)
+set.seed(86)
+```
+
+
+```{r}
+data <- read_csv("sampled_dataset.csv", show_col_types = FALSE)
+train <- read_csv("train_data.csv", show_col_types = FALSE)
+validation <- read_csv("validation_data.csv", show_col_types = FALSE)
+test <- read_csv("test_data.csv", show_col_types = FALSE)
+```
+
+```{r}
+data <- data[, !(names(data) %in% c("longitude", "latitude", "CLC2N", "CLC3N", "M11", "M15", "region"))]
+train <- train[, !(names(train) %in%c("longitude", "latitude", "CLC2N", "CLC3N", "M11", "M15", "region"))]
+test <- test[, !(names(test) %in% c("longitude", "latitude", "CLC2N", "CLC3N", "M11", "M15", "region"))]
+validation <- validation[, !(names(validation) %in% c("longitude", "latitude", "CLC2N", "CLC3N", "M11", "M15", "region"))]
+```
+
+```{r}
+data <- as.data.frame(data)
+train <- as.data.frame(train)
+test <- as.data.frame(test)
+```
+
+
+# Classification
+
+## Balancing the dataset (only train data)
+```{r}
+BALANCE = TRUE
+```
+
+```{r}
+# Step 1: Identify class distribution
+class_distribution <- table(train$CLC1N)
+print("Original class distribution:")
+print(class_distribution)
+print("Original class distribution (%):")
+print(class_distribution/sum(class_distribution)*100)
+```
+```{r}
+# Step 2: Define target proportions
+
+CLASS_1_PROPORTION = 0.2
+CLASS_2_PROPORTION = 0.3   
+CLASS_3_PROPORTION = 0.3
+CLASS_4_PROPORTION = 0.1
+CLASS_5_PROPORTION = 0.1
+target_proportions <- c(CLASS_1_PROPORTION, CLASS_2_PROPORTION, CLASS_3_PROPORTION, CLASS_4_PROPORTION, CLASS_5_PROPORTION)
+total_samples <- sum(class_distribution)
+target_distribution <- floor(total_samples * target_proportions)
+print("Target class distribution:")
+print(target_distribution)
+print("Target class distribution (%):")
+print(target_distribution/sum(target_distribution)*100)
+```
+```{r}
+# Step 3: Perform balancing
+if (BALANCE){
+  balanced_train_cl1 <- data.frame()
+  for (class in names(class_distribution)) {
+    class_data <- train[train$CLC1N == class, ]
+    target_size <- target_distribution[as.numeric(class)]
+    
+    if (nrow(class_data) > target_size) {
+      # Undersample majority class
+      sampled_data <- class_data[sample(1:nrow(class_data), target_size), ]
+    } else {
+      # Oversample minority classes
+      sampled_data <- class_data
+      remaining_size <- target_size - nrow(sampled_data)
+      additional_data <- class_data[sample(1:nrow(class_data), size = remaining_size, replace = TRUE), ]
+      sampled_data <- rbind(sampled_data, additional_data)
+    }
+    
+    balanced_train_cl1 <- rbind(balanced_train_cl1, sampled_data)
+  }
+  train <- balanced_train_cl1
+}
+
+# Check new distribution
+print("Balanced class distribution:")
+print(table(train$CLC1N))
+```
+
+```{r}
+X_train <- train[, -c(ncol(train))]
+y_train <- train[[ncol(train)]]
+y_train <- factor(y_train)
+is.factor(y_train)
+
+X_test <- test[, -c(ncol(test))]
+y_test <- test[[ncol(test)]]
+y_test <- factor(y_test)
+is.factor(y_test)
+```
+
+```{r}
+table(y_train)
+table(y_test)
+```
+## Discriminant Analysis
+
+
+## Bayes Classification
+
+```{r}
+# General usage via formula interface
+ nb <- nonparametric_naive_bayes(x = as.matrix(X_train), y= y_train)
+summary(nb)
+```
+```{r}
+#dir_path <- "graphics/NEW_BAYES/ORIGINAL/NOT_BALANCED"
+#dir_path <- "graphics/NEW_BAYES/ORIGINAL/BALANCED_20_30_30_10_10"
+
+# Create the directory if it doe_n't exist
+#if (!dir.exists(dir_path)) {
+#    dir.create(dir_path, recursive = TRUE)
+#}
+# Save the plots
+#for (i in 1:13) {
+    # Create a filename for each plot
+#    filename <- file.path(dir_path, paste0("plot_", i, ".png"))
+    
+#    # Open a PNG device
+ #   png(filename)
+    
+    # Generate the plot
+  #  plot(nb, which = i)
+    
+    # Close the device
+  #  dev.off()
+}
+```
+
+```{r}
+nb_predictions_test <- predict(nb, newdata = as.matrix(X_test))
+nb_predictions_train <- predict(nb, newdata = as.matrix(X_train))
+
+nb_predictions_train_confusion_matrix <- confusionMatrix(
+  data = nb_predictions_train, reference = y_train)
+
+nb_predictions_test_confusion_matrix <- confusionMatrix(
+  data = nb_predictions_test, reference = y_test)
+
+cat("Accuracy train: ", nb_predictions_train_confusion_matrix$overall["Accuracy"], "\n")
+cat("Accuracy test: ", nb_predictions_test_confusion_matrix$overall["Accuracy"], "\n")
+```
+
+
+#### Confusion Matrices
+
+```{r}
+# For the training confusion matrix
+train_plot <- ggplot(data = as.data.frame(nb_predictions_train_confusion_matrix$table), 
+                     aes(x = Prediction, y = Reference)) +
+    geom_tile(aes(fill = Freq), color = "white") +
+    scale_fill_gradient(low = "red", high = "yellow") +
+    geom_text(aes(label = Freq), vjust = 1, size = 5) +  # Increase size of text labels
+    labs(title = "Confusion Matrix - Train", x = "Predicted", y = "Real") +
+    theme_minimal() +
+    theme(
+        plot.title = element_text(size = 20),  # Increase title size
+        axis.title.x = element_text(size = 15),  # Increase x-axis title size
+        axis.title.y = element_text(size = 15),  # Increase y-axis title size
+        axis.text.x = element_text(size = 12),  # Increase x-axis text size
+        axis.text.y = element_text(size = 12)   # Increase y-axis text size
+    )
+
+ggplotly(train_plot)
+# Save the ggplot version of the training confusion matrix
+#ggsave(file.path(dir_path, "train_confusion_matrix.png"), 
+#       plot = train_plot, 
+#       width = 8, height = 6)
+
+# Convert to plotly and save the interactive version
+#train_plotly <- ggplotly(train_plot)
+#htmlwidgets::saveWidget(train_plotly, file.path(dir_path, "train_confusion_matrix.html"))
+
+# For the testing confusion matrix
+test_plot <- ggplot(data = as.data.frame(nb_predictions_test_confusion_matrix$table), 
+                    aes(x = Prediction, y = Reference)) +
+    geom_tile(aes(fill = Freq), color = "white") +
+    scale_fill_gradient(low = "red", high = "yellow") +
+    geom_text(aes(label = Freq), vjust = 1, size = 5) +  # Increase size of text labels
+    labs(title = "Confusion Matrix - Test", x = "Predicted", y = "Real") +
+    theme_minimal() +
+    theme(
+        plot.title = element_text(size = 20),  # Increase title size
+        axis.title.x = element_text(size = 15),  # Increase x-axis title size
+        axis.title.y = element_text(size = 15),  # Increase y-axis title size
+        axis.text.x = element_text(size = 12),  # Increase x-axis text size
+        axis.text.y = element_text(size = 12)   # Increase y-axis text size
+    )
+
+ggplotly(test_plot)
+
+# Save the ggplot version of the training confusion matrix
+#ggsave(file.path(dir_path, "test_confusion_matrix.png"), 
+#       plot = test_plot, 
+#       width = 8, height = 6)
+
+# Convert to plotly and save the interactive version
+#test_plotly <- ggplotly(test_plot)
+#htmlwidgets::saveWidget(test_plotly, file.path(dir_path, "test_confusion_matrix.html"))
+```
+#### Metrics
+```{r}
+# ----------- TRAIN ----------------
+
+# Extract class-wise metrics
+class_metrics_train <- as.data.frame(nb_predictions_train_confusion_matrix$byClass)
+class_metrics_train$Class <- rownames(class_metrics_train)
+
+
+# Extract overall metrics
+overall_metrics_train <- data.frame(
+  Metric = names(nb_predictions_train_confusion_matrix$overall),
+  Value = nb_predictions_train_confusion_matrix$overall
+)
+
+# Class-wise metrics table
+kable(
+  class_metrics_train, 
+  format = "html", 
+  digits = 3, 
+  caption = "Class-wise Metrics for Train Data"
+)
+
+# Overall metrics table
+kable(
+  overall_metrics_train, 
+  format = "html", 
+  digits = 3, 
+  caption = "Overall Metrics for Train Data"
+)
+
+# Save class-wise metrics to a .txt file
+#write.table(class_metrics_test, 
+#            file = file.path(dir_path, "class_metrics_train.txt"), 
+#            sep = "\t", 
+#            row.names = FALSE, 
+#            quote = FALSE)
+
+# Save overall metrics to a .txt file
+#write.table(overall_metrics_test, 
+#            file = file.path(dir_path, "overall_metrics_train.txt"), 
+#            sep = "\t", 
+#            row.names = FALSE, 
+#            quote = FALSE)
+
+# ----------- TEST ----------------
+
+class_metrics_test <- as.data.frame(nb_predictions_test_confusion_matrix$byClass)
+class_metrics_test$Class <- rownames(class_metrics_test)
+
+# Extract overall metrics
+overall_metrics_test <- data.frame(
+  Metric = names(nb_predictions_test_confusion_matrix$overall),
+  Value = nb_predictions_test_confusion_matrix$overall
+)
+
+# Class-wise metrics table
+kable(
+  class_metrics_test, 
+  format = "html", 
+  digits = 3, 
+  caption = "Class-wise Metrics for Test Data"
+)
+
+# Overall metrics table
+kable(
+  overall_metrics_test, 
+  format = "html", 
+  digits = 3, 
+  caption = "Overall Metrics for Test Data"
+)
+
+# Save class-wise metrics to a .txt file
+#write.table(class_metrics_test, 
+#            file = file.path(dir_path, "class_metrics_test.txt"), 
+#            sep = "\t", 
+ #           row.names = FALSE, 
+ #           quote = FALSE)
+
+# Save overall metrics to a .txt file
+#write.table(overall_metrics_test, 
+#            file = file.path(dir_path, "overall_metrics_test.txt"), 
+#            sep = "\t", 
+#            row.names = FALSE, 
+ #           quote = FALSE)
+```

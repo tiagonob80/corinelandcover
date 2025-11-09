@@ -1,0 +1,62 @@
+# Classification task
+
+```{r}
+# Libraries
+library(readr)
+library(data.table)
+set.seed(86)
+```
+
+```{r}
+data <- read_csv("sampled_dataset.csv", show_col_types = FALSE)
+train <- read_csv("train_data.csv", show_col_types = FALSE)
+validation <- read_csv("validation_data.csv", show_col_types = FALSE)
+test <- read_csv("test_data.csv", show_col_types = FALSE)
+```
+
+```{r}
+data <- data[, !(names(data) %in% c("longitude", "latitude", "CLC2N", "CLC3N", "M11", "M15", "region"))]
+train <- train[, !(names(train) %in%c("longitude", "latitude", "CLC2N", "CLC3N", "M11", "M15", "region"))]
+test <- test[, !(names(test) %in% c("longitude", "latitude", "CLC2N", "CLC3N", "M11", "M15", "region"))]
+validation <- validation[, !(names(validation) %in% c("longitude", "latitude", "CLC2N", "CLC3N", "M11", "M15", "region"))]
+```
+
+```{r}
+data <- as.data.frame(data)
+train <- as.data.frame(train)
+test <- as.data.frame(test)
+```
+
+
+## Study of Multivariate Normality Assumption
+
+### All data
+
+```{r}
+# Use dataset without classification feature (last column)
+data_ <- data[, -c(ncol(data))]
+qqnorm(as.matrix(data_))
+qqline(data_, col = "blue", lwd = 2) # Add reference line
+```
+
+### Per class
+
+```{r}
+unique(data$CLC1N)
+```
+
+```{r}
+split_data_CLC1N <- split(data, data$CLC1N)
+```
+
+```{r}
+for (data_class in split_data_CLC1N){
+  
+  data_ <- data_class
+  data_ <- data_[, -c(ncol(data_))]
+
+  qqnorm(as.matrix(data_))
+  qqline(data_, col = "red", lwd = 2)
+}
+```
+

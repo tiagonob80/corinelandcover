@@ -1,0 +1,780 @@
+```{r}
+train_data <- read_csv("train_data.csv")
+validation_data <- read_csv("validation_data.csv")
+test_data <- read_csv("test_data.csv")
+```
+
+**Original**
+
+```{r}
+train_d <- train_data[, -c(1, 2, 16, 17)]
+val_d <- validation_data[, -c(1, 2, 16, 17)]
+test_d <- test_data[, -c(1, 2, 16, 17)]
+```
+
+```{r}
+#library(nnet)
+
+multinom_model <- multinom(CLC1N ~ ., data = train_d)
+```
+
+```{r}
+train_pred_class <- predict(multinom_model, newdata = train_d, type = "class")
+
+confusion_matrix_train <- table(Predicted = train_pred_class, Actual = train_d$CLC1N)
+print(confusion_matrix_train)
+```
+
+```{r}
+recall_train <- diag(confusion_matrix_train) / colSums(confusion_matrix_train)
+print("Recall for each class:")
+print(recall_train)
+
+precision_train <- diag(confusion_matrix_train) / rowSums(confusion_matrix_train)
+print("Precision for each class:")
+print(precision_train)
+
+f1_train <- 2 * (precision_train * recall_train) / (precision_train + recall_train)
+print("F1-Measure for each class:")
+print(f1_train)
+
+mean_f1_train <- mean(f1_train)
+
+print("F1-Measure Average:")
+print(mean_f1_train)
+```
+
+```{r}
+# Combine results into a table
+results_table_train <- data.frame(
+  Class_train = c("1", "2", "3", "4", "5"),
+  Precision_train = round(precision_train, 2),
+  Recall_train = round(recall_train, 2),
+  F1_Measure_train = round(f1_train, 2)
+)
+
+print(results_table_train)
+```
+
+```{r}
+accuracy_train <- sum(diag(confusion_matrix_train)) / sum(confusion_matrix_train)
+print(paste("Overall Accuracy:", accuracy_train * 100, "%"))
+```
+
+```{r}
+val_pred_class <- predict(multinom_model, newdata = val_d, type = "class")
+
+confusion_matrix_val <- table(Predicted = val_pred_class, Actual = val_d$CLC1N)
+print(confusion_matrix_val)
+```
+
+```{r}
+recall_val <- diag(confusion_matrix_val) / colSums(confusion_matrix_val)
+print("Recall for each class:")
+print(recall_val)
+
+precision_val <- diag(confusion_matrix_val) / rowSums(confusion_matrix_val)
+print("Precision for each class:")
+print(precision_val)
+
+f1_val <- 2 * (precision_val * recall_val) / (precision_val + recall_val)
+print("F1-Measure for each class:")
+print(f1_val)
+
+mean_f1_val <- mean(f1_val)
+
+print("F1-Measure Average:")
+print(mean_f1_val)
+```
+
+```{r}
+# Combine results into a table
+results_table_val <- data.frame(
+  Class_val = c("1", "2", "3", "4", "5"),
+  Precision_val = round(precision_val, 2),
+  Recall_val = round(recall_val, 2),
+  F1_Measure_val = round(f1_val, 2)
+)
+
+print(results_table_val)
+```
+
+```{r}
+accuracy_val <- sum(diag(confusion_matrix_val)) / sum(confusion_matrix_val)
+print(paste("Overall Accuracy:", accuracy_val * 100, "%"))
+```
+
+```{r}
+test_pred_class <- predict(multinom_model, newdata = test_d, type = "class")
+confusion_matrix_test <- table(Predicted = test_pred_class, Actual = test_d$CLC1N)
+print(confusion_matrix_test)
+```
+
+```{r}
+recall_test <- diag(confusion_matrix_test) / colSums(confusion_matrix_test) 
+print("Recall for each class:") 
+print(recall_test)  
+precision_test <- diag(confusion_matrix_test) / rowSums(confusion_matrix_test) 
+print("Precision for each class:") 
+print(precision_test)  
+f1_test <- 2 * (precision_test * recall_test) / (precision_test + recall_test) 
+print("F1-Measure for each class:")
+print(f1_test)
+
+mean_f1_test <- mean(f1_test)
+
+print("F1-Measure Average:")
+print(mean_f1_test)
+```
+
+```{r}
+# Combine results into a table 
+results_table_test <- data.frame(   
+  Class_test = c("1", "2", "3", "4", "5"),   
+  Precision_test = round(precision_test, 2),   
+  Recall_test = round(recall_test, 2),   
+  F1_Measure_test = round(f1_test, 2) ) 
+
+print(results_table_test)
+```
+
+```{r}
+accuracy_test <- sum(diag(confusion_matrix_test)) / sum(confusion_matrix_test) 
+print(paste("Overall Accuracy:", accuracy_test * 100, "%"))
+```
+
+**Standardized**
+
+```{r}
+train_stan <- train_data_standardized[, -c(1, 2, 16, 17)] 
+val_stan <- validation_data_standardized[, -c(1, 2, 16, 17)] 
+test_stan <- test_data_standardized[, -c(1, 2, 16, 17)]
+```
+
+```{r}
+#library(nnet)  
+multinom_model <- multinom(CLC1N ~ ., data = train_stan)
+```
+
+```{r}
+train_stan_pred_class <- predict(multinom_model, newdata = train_stan, type = "class")
+confusion_matrix_train_stan <- table(Predicted = train_stan_pred_class, Actual = train_stan$CLC1N)
+print(confusion_matrix_train_stan)
+```
+
+```{r}
+recall_train_stan <- diag(confusion_matrix_train_stan) / colSums(confusion_matrix_train_stan)
+print("Recall for each class:") 
+print(recall_train_stan)  
+precision_train_stan <- diag(confusion_matrix_train_stan) / rowSums(confusion_matrix_train_stan) 
+print("Precision for each class:") 
+print(precision_train_stan)  
+f1_train_stan <- 2 * (precision_train_stan * recall_train_stan) / (precision_train_stan + recall_train_stan) 
+print("F1-Measure for each class:") 
+print(f1_train_stan)
+
+mean_f1_train_stan <- mean(f1_train_stan)
+
+print("F1-Measure Average:")
+print(mean_f1_train_stan)
+```
+
+```{r}
+# Combine results into a table 
+results_table_train_stan <- data.frame(   
+  Class_train_stan = c("1", "2", "3", "4", "5"),   
+  Precision_train_stan = round(precision_train_stan, 2),   
+  Recall_train_stan = round(recall_train_stan, 2),   
+  F1_Measure_train_stan = round(f1_train_stan, 2) )  
+
+print(results_table_train_stan)
+```
+
+```{r}
+accuracy_train_stan <- sum(diag(confusion_matrix_train_stan)) / sum(confusion_matrix_train_stan) 
+print(paste("Overall Accuracy:", accuracy_train_stan * 100, "%"))
+```
+
+```{r}
+val_stan_pred_class <- predict(multinom_model, newdata = val_stan, type = "class")
+confusion_matrix_val_stan <- table(Predicted = val_stan_pred_class, Actual = val_stan$CLC1N)
+print(confusion_matrix_val_stan)
+```
+
+```{r}
+recall_val_stan <- diag(confusion_matrix_val_stan) / colSums(confusion_matrix_val_stan)
+print("Recall for each class:") 
+print(recall_val_stan)  
+precision_val_stan <- diag(confusion_matrix_val_stan) / rowSums(confusion_matrix_val_stan) 
+print("Precision for each class:") 
+print(precision_val_stan)  
+f1_val_stan <- 2 * (precision_val_stan * recall_val_stan) / (precision_val_stan + recall_val_stan) 
+print("F1-Measure for each class:") 
+print(f1_val_stan)
+
+mean_f1_val_stan <- mean(f1_val_stan)
+
+print("F1-Measure Average:")
+print(mean_f1_val_stan)
+```
+
+```{r}
+# Combine results into a table 
+results_table_val_stan <- data.frame(   
+  Class_val_stan = c("1", "2", "3", "4", "5"),   
+  Precision_val_stan = round(precision_val_stan, 2),   
+  Recall_val_stan = round(recall_val_stan, 2),   
+  F1_Measure_val_stan = round(f1_val_stan, 2) )  
+
+print(results_table_val_stan)
+```
+
+```{r}
+accuracy_val_stan <- sum(diag(confusion_matrix_val_stan)) / sum(confusion_matrix_val_stan) 
+print(paste("Overall Accuracy:", accuracy_val_stan * 100, "%"))
+```
+
+```{r}
+test_stan_pred_class <- predict(multinom_model, newdata = test_stan, type = "class") 
+confusion_matrix_test_stan <- table(Predicted = test_stan_pred_class, Actual = test_stan$CLC1N) 
+print(confusion_matrix_test_stan)
+```
+
+```{r}
+recall_test_stan <- diag(confusion_matrix_test_stan) / colSums(confusion_matrix_test_stan)  
+print("Recall for each class:")  
+print(recall_test_stan)   
+precision_test_stan <- diag(confusion_matrix_test_stan) / rowSums(confusion_matrix_test_stan)  
+print("Precision for each class:")  
+print(precision_test_stan)   
+f1_test_stan <- 2 * (precision_test_stan * recall_test_stan) / (precision_test_stan + recall_test_stan)
+print("F1-Measure for each class:") 
+print(f1_test_stan)
+
+mean_f1_test_stan <- mean(f1_test_stan)
+
+print("F1-Measure Average:")
+print(mean_f1_test_stan)
+```
+
+```{r}
+# Combine results into a table  
+results_table_test_stan <- data.frame(      
+  Class_test_stan = c("1", "2", "3", "4", "5"),      
+  Precision_test_stan = round(precision_test_stan, 2),      
+  Recall_test_stan = round(recall_test_stan, 2),      
+  F1_Measure_test_stan = round(f1_test_stan, 2) )   
+
+print(results_table_test_stan)
+```
+
+```{r}
+accuracy_test_stan <- sum(diag(confusion_matrix_test_stan)) / sum(confusion_matrix_test_stan)
+print(paste("Overall Accuracy:", accuracy_test_stan * 100, "%"))
+```
+
+**Balancing**
+
+```{r}
+## Balancing the dataset
+
+# Step 1: Identify class distribution
+class_distribution <- table(train_d$CLC1N)
+print("Original class distribution:")
+print(class_distribution)
+print("Original class distribution (%):")
+print(class_distribution/sum(class_distribution)*100)
+```
+
+```{r}
+# Step 2: Define target proportions
+target_proportions <- c(0.15, 0.35, 0.4, 0.05, 0.05)  # Suggested proportions
+total_samples <- sum(class_distribution)
+target_distribution <- floor(total_samples * target_proportions)
+print("Target class distribution:")
+print(target_distribution)
+print("Target class distribution (%):")
+print(target_distribution/sum(target_distribution)*100)
+```
+
+```{r}
+# Step 3: Perform balancing
+balanced_train_d <- data.frame()
+for (class in names(class_distribution)) {
+  class_data <- train_d[train_d$CLC1N == class, ]
+  target_size <- target_distribution[as.numeric(class)]
+  
+  if (nrow(class_data) > target_size) {
+    # Undersample majority class
+    sampled_data <- class_data[sample(1:nrow(class_data), target_size), ]
+  } else {
+    # Oversample minority classes
+    sampled_data <- class_data
+    remaining_size <- target_size - nrow(sampled_data)
+    additional_data <- class_data[sample(1:nrow(class_data), size = remaining_size, replace = TRUE), ]
+    sampled_data <- rbind(sampled_data, additional_data)
+  }
+  
+  balanced_train_d <- rbind(balanced_train_d, sampled_data)
+}
+
+# Check new distribution
+print("Balanced class distribution:")
+print(table(balanced_train_d$CLC1N))
+```
+
+```{r}
+#library(nnet)  
+multinom_model <- multinom(CLC1N ~ ., data = balanced_train_d)
+```
+
+```{r}
+train_bal_pred_class <- predict(multinom_model, newdata = balanced_train_d, type = "class")
+confusion_matrix_train_bal <- table(Predicted = train_bal_pred_class, Actual = balanced_train_d$CLC1N)
+print(confusion_matrix_train_bal)
+```
+
+```{r}
+recall_train_bal <- diag(confusion_matrix_train_bal) / colSums(confusion_matrix_train_bal)  
+print("Recall for each class:")  
+print(recall_train_bal)   
+precision_train_bal <- diag(confusion_matrix_train_bal) / rowSums(confusion_matrix_train_bal)  
+print("Precision for each class:")  
+print(precision_train_bal)   
+f1_train_bal <- 2 * (precision_train_bal * recall_train_bal) / (precision_train_bal + recall_train_bal)
+print("F1-Measure for each class:") 
+print(f1_train_bal)
+
+mean_f1_train_bal <- mean(f1_train_bal)
+
+print("F1-Measure Average:")
+print(mean_f1_train_bal)
+```
+
+```{r}
+# Combine results into a table  
+results_table_train_bal <- data.frame(      
+  Class_train_bal = c("1", "2", "3", "4", "5"),      
+  Precision_train_bal = round(precision_train_bal, 2),      
+  Recall_train_bal = round(recall_train_bal, 2),      
+  F1_Measure_train_bal = round(f1_train_bal, 2) )   
+
+print(results_table_train_bal)
+```
+
+```{r}
+accuracy_train_bal <- sum(diag(confusion_matrix_train_bal)) / sum(confusion_matrix_train_bal)
+print(paste("Overall Accuracy:", accuracy_train_bal * 100, "%"))
+```
+
+```{r}
+val_bal_pred_class <- predict(multinom_model, newdata = val_d, type = "class")
+confusion_matrix_val_bal <- table(Predicted = val_bal_pred_class, Actual = val_d$CLC1N)
+print(confusion_matrix_val_bal)
+```
+
+```{r}
+recall_val_bal <- diag(confusion_matrix_val_bal) / colSums(confusion_matrix_val_bal)  
+print("Recall for each class:")  
+print(recall_val_bal)   
+precision_val_bal <- diag(confusion_matrix_val_bal) / rowSums(confusion_matrix_val_bal)  
+print("Precision for each class:")  
+print(precision_val_bal)   
+f1_val_bal <- 2 * (precision_val_bal * recall_val_bal) / (precision_val_bal + recall_val_bal)
+print("F1-Measure for each class:") 
+print(f1_val_bal)
+
+mean_f1_val_bal <- mean(f1_val_bal)
+
+print("F1-Measure Average:")
+print(mean_f1_val_bal)
+```
+
+```{r}
+# Combine results into a table  
+results_table_val_bal <- data.frame(      
+  Class_val_bal = c("1", "2", "3", "4", "5"),      
+  Precision_val_bal = round(precision_val_bal, 2),      
+  Recall_val_bal = round(recall_val_bal, 2),      
+  F1_Measure_val_bal = round(f1_val_bal, 2) )   
+
+print(results_table_val_bal)
+```
+
+```{r}
+accuracy_val_bal <- sum(diag(confusion_matrix_val_bal)) / sum(confusion_matrix_val_bal)
+print(paste("Overall Accuracy:", accuracy_val_bal * 100, "%"))
+```
+
+```{r}
+test_bal_pred_class <- predict(multinom_model, newdata = test_d, type = "class") 
+confusion_matrix_test_bal <- table(Predicted = test_bal_pred_class, Actual = test_d$CLC1N) 
+print(confusion_matrix_test_bal)
+```
+
+```{r}
+recall_test_bal <- diag(confusion_matrix_test_bal) / colSums(confusion_matrix_test_bal)  
+print("Recall for each class:")  
+print(recall_test_bal)   
+precision_test_bal <- diag(confusion_matrix_test_bal) / rowSums(confusion_matrix_test_bal)  
+print("Precision for each class:")  
+print(precision_test_bal)   
+f1_test_bal <- 2 * (precision_test_bal * recall_test_bal) / (precision_test_bal + recall_test_bal)
+print("F1-Measure for each class:") 
+print(f1_test_bal)
+
+mean_f1_test_bal <- mean(f1_test_bal)
+
+print("F1-Measure Average:")
+print(mean_f1_test_bal)
+```
+
+```{r}
+# Combine results into a table  
+results_table_test_bal <- data.frame(      
+  Class_test_bal = c("1", "2", "3", "4", "5"),      
+  Precision_test_bal = round(precision_test_bal, 2),      
+  Recall_test_bal = round(recall_test_bal, 2),      
+  F1_Measure_test_bal = round(f1_test_bal, 2) )   
+
+print(results_table_test_bal)
+```
+
+```{r}
+accuracy_test_bal <- sum(diag(confusion_matrix_test_bal)) / sum(confusion_matrix_test_bal)
+print(paste("Overall Accuracy:", accuracy_test_bal * 100, "%"))
+```
+
+**PCA**
+
+```{r}
+#Compute the covariance matrix
+cov_matrix <- cov(train_d[, -c(14)])
+
+#Perform eigen decomposition on the covariance matrix
+eigen_decomp <- eigen(cov_matrix)
+
+#Get the eigenvalues and eigenvectors (principal components)
+eigenvalues <- eigen_decomp$values   # These give the amount of variance explained by each component
+eigenvectors <- eigen_decomp$vectors # These are the principal components
+
+# Variance explained by each principal component
+explained_variance <- eigenvalues / sum(eigenvalues)
+# Cumulative variance explained
+cumulative_variance <- cumsum(explained_variance)
+
+
+cat("\nExplained Variance by each Principal Component:\n")
+print(explained_variance)
+
+cat("\nCumulative Variance Explained:\n")
+print(cumulative_variance)
+
+cat("\nEigenvalues for each pca:\n")
+print(eigenvalues)
+
+cat("\nMean of the eigenvalues:\n")
+
+print(sum(eigenvalues)/6)
+```
+
+```{r}
+scores <- as.matrix(train_d[, -c(14)]) %*% eigenvectors
+
+train_pca <- as.data.frame(scores[, c(1, 2)])
+train_pca$CLC1N <- train_d$CLC1N
+```
+
+```{r}
+multinom_model <- multinom(CLC1N ~ ., data = train_pca)
+```
+
+```{r}
+train_pca_pred_class <- predict(multinom_model, newdata = train_pca, type = "class")
+confusion_matrix_train_pca <- table(Predicted = train_pca_pred_class, Actual = train_pca$CLC1N)
+print(confusion_matrix_train_pca)
+```
+
+```{r}
+recall_train_pca <- diag(confusion_matrix_train_pca) / colSums(confusion_matrix_train_pca)  
+print("Recall for each class:")  
+print(recall_train_pca)   
+precision_train_pca <- diag(confusion_matrix_train_pca) / rowSums(confusion_matrix_train_pca)  
+print("Precision for each class:")  
+print(precision_train_pca)   
+f1_train_pca <- 2 * (precision_train_pca * recall_train_pca) / (precision_train_pca + recall_train_pca)
+print("F1-Measure for each class:") 
+print(f1_train_pca)
+
+mean_f1_train_pca <- mean(f1_train_pca)
+
+print("F1-Measure Average:")
+print(mean_f1_train_pca)
+```
+
+```{r}
+# Combine results into a table  
+results_table_train_pca <- data.frame(      
+  Class_train_pca = c("1", "2", "3", "4", "5"),      
+  Precision_train_pca = round(precision_train_pca, 2),      
+  Recall_train_pca = round(recall_train_pca, 2),      
+  F1_Measure_train_pca = round(f1_train_pca, 2) )   
+
+print(results_table_train_pca)
+```
+
+```{r}
+accuracy_train_pca <- sum(diag(confusion_matrix_train_pca)) / sum(confusion_matrix_train_pca)
+print(paste("Overall Accuracy:", accuracy_train_pca * 100, "%"))
+```
+
+```{r}
+scores_val <- as.matrix(val_d[, -c(14)]) %*% eigenvectors
+
+val_pca <- as.data.frame(scores_val[, c(1, 2)])
+val_pca$CLC1N <- val_d$CLC1N
+
+scores_test <- as.matrix(test_d[, -c(14)]) %*% eigenvectors
+
+test_pca <- as.data.frame(scores_test[, c(1, 2)])
+test_pca$CLC1N <- test_d$CLC1N
+```
+
+```{r}
+val_pca_pred_class <- predict(multinom_model, newdata = val_pca, type = "class")
+confusion_matrix_val_pca <- table(Predicted = val_pca_pred_class, Actual = val_pca$CLC1N)
+print(confusion_matrix_val_pca)
+```
+
+```{r}
+recall_val_pca <- diag(confusion_matrix_val_pca) / colSums(confusion_matrix_val_pca)  
+print("Recall for each class:")  
+print(recall_val_pca)   
+precision_val_pca <- diag(confusion_matrix_val_pca) / rowSums(confusion_matrix_val_pca)  
+print("Precision for each class:")  
+print(precision_val_pca)   
+f1_val_pca <- 2 * (precision_val_pca * recall_val_pca) / (precision_val_pca + recall_val_pca)
+print("F1-Measure for each class:") 
+print(f1_val_pca)
+
+mean_f1_val_pca <- mean(f1_val_pca)
+
+print("F1-Measure Average:")
+print(mean_f1_val_pca)
+```
+
+```{r}
+# Combine results into a table  
+results_table_val_pca <- data.frame(      
+  Class_val_pca = c("1", "2", "3", "4", "5"),      
+  Precision_val_pca = round(precision_val_pca, 2),      
+  Recall_val_pca = round(recall_val_pca, 2),      
+  F1_Measure_val_pca = round(f1_val_pca, 2) )   
+
+print(results_table_val_pca)
+```
+
+```{r}
+accuracy_val_pca <- sum(diag(confusion_matrix_val_pca)) / sum(confusion_matrix_val_pca)
+print(paste("Overall Accuracy:", accuracy_val_pca * 100, "%"))
+```
+
+```{r}
+test_pca_pred_class <- predict(multinom_model, newdata = test_pca, type = "class")
+confusion_matrix_test_pca <- table(Predicted = test_pca_pred_class, Actual = test_pca$CLC1N)
+print(confusion_matrix_test_pca)
+```
+
+```{r}
+recall_test_pca <- diag(confusion_matrix_test_pca) / colSums(confusion_matrix_test_pca)  
+print("Recall for each class:")  
+print(recall_test_pca)   
+precision_test_pca <- diag(confusion_matrix_test_pca) / rowSums(confusion_matrix_test_pca)  
+print("Precision for each class:")  
+print(precision_test_pca)   
+f1_test_pca <- 2 * (precision_test_pca * recall_test_pca) / (precision_test_pca + recall_test_pca)
+print("F1-Measure for each class:") 
+print(f1_test_pca)
+
+mean_f1_test_pca <- mean(f1_test_pca)
+
+print("F1-Measure Average:")
+print(mean_f1_test_pca)
+```
+
+```{r}
+# Combine results into a table  
+results_table_test_pca <- data.frame(      
+  Class_test_pca = c("1", "2", "3", "4", "5"),      
+  Precision_test_pca = round(precision_test_pca, 2),      
+  Recall_test_pca = round(recall_test_pca, 2),      
+  F1_Measure_test_pca = round(f1_test_pca, 2) )   
+
+print(results_table_test_pca)
+```
+
+```{r}
+accuracy_test_pca <- sum(diag(confusion_matrix_test_pca)) / sum(confusion_matrix_test_pca)
+print(paste("Overall Accuracy:", accuracy_test_pca * 100, "%"))
+```
+
+**PCA Balanced**
+
+```{r}
+#Compute the covariance matrix
+cov_matrix_bal <- cov(balanced_train_d[, -c(14)])
+
+#Perform eigen decomposition on the covariance matrix
+eigen_decomp_bal <- eigen(cov_matrix_bal)
+
+#Get the eigenvalues and eigenvectors (principal components)
+eigenvalues_bal <- eigen_decomp_bal$values   # These give the amount of variance explained by each component
+eigenvectors_bal <- eigen_decomp_bal$vectors # These are the principal components
+
+# Variance explained by each principal component
+explained_variance_bal <- eigenvalues_bal / sum(eigenvalues_bal)
+# Cumulative variance explained
+cumulative_variance_bal <- cumsum(explained_variance_bal)
+
+
+cat("\nExplained Variance by each Principal Component:\n")
+print(explained_variance_bal)
+
+cat("\nCumulative Variance Explained:\n")
+print(cumulative_variance_bal)
+
+cat("\nEigenvalues for each pca:\n")
+print(eigenvalues_bal)
+
+cat("\nMean of the eigenvalues:\n")
+
+print(sum(eigenvalues_bal)/6)
+```
+
+```{r}
+scores_bal <- as.matrix(balanced_train_d[, -c(14)]) %*% eigenvectors_bal
+
+train_pca_bal <- as.data.frame(scores_bal[, c(1, 2)])
+train_pca_bal$CLC1N <- balanced_train_d$CLC1N
+```
+
+```{r}
+multinom_model <- multinom(CLC1N ~ ., data = train_pca_bal)
+```
+
+```{r}
+train_pca_bal_pred_class <- predict(multinom_model, newdata = train_pca_bal, type = "class")
+confusion_matrix_train_pca_bal <- table(Predicted = train_pca_bal_pred_class, Actual = train_pca_bal$CLC1N)
+print(confusion_matrix_train_pca_bal)
+```
+
+```{r}
+recall_train_pca_bal <- diag(confusion_matrix_train_pca_bal) / colSums(confusion_matrix_train_pca_bal)  
+print("Recall for each class:")  
+print(recall_train_pca_bal)   
+precision_train_pca_bal <- diag(confusion_matrix_train_pca_bal) / rowSums(confusion_matrix_train_pca_bal)  
+print("Precision for each class:")  
+print(precision_train_pca_bal)   
+f1_train_pca_bal <- 2 * (precision_train_pca_bal * recall_train_pca_bal) / (precision_train_pca_bal + recall_train_pca_bal)
+print("F1-Measure for each class:") 
+print(f1_train_pca_bal)
+
+mean_f1_train_pca_bal <- mean(f1_train_pca_bal)
+
+print("F1-Measure Average:")
+print(mean_f1_train_pca_bal)
+```
+
+```{r}
+# Combine results into a table  
+results_table_train_pca_bal <- data.frame(      
+  Class_train_pca_bal = c("1", "2", "3", "4", "5"),      
+  Precision_train_pca_bal = round(precision_train_pca_bal, 2),      
+  Recall_train_pca_bal = round(recall_train_pca_bal, 2),      
+  F1_Measure_train_pca_bal = round(f1_train_pca_bal, 2) )   
+
+print(results_table_train_pca_bal)
+```
+
+```{r}
+accuracy_train_pca_bal <- sum(diag(confusion_matrix_train_pca_bal)) / sum(confusion_matrix_train_pca_bal)
+print(paste("Overall Accuracy:", accuracy_train_pca_bal * 100, "%"))
+```
+
+```{r}
+val_pca_bal_pred_class <- predict(multinom_model, newdata = val_pca, type = "class")
+confusion_matrix_val_pca_bal <- table(Predicted = val_pca_bal_pred_class, Actual = val_pca$CLC1N)
+print(confusion_matrix_val_pca_bal)
+```
+
+```{r}
+recall_val_pca_bal <- diag(confusion_matrix_val_pca_bal) / colSums(confusion_matrix_val_pca_bal)  
+print("Recall for each class:")  
+print(recall_val_pca_bal)   
+precision_val_pca_bal <- diag(confusion_matrix_val_pca_bal) / rowSums(confusion_matrix_val_pca_bal)  
+print("Precision for each class:")  
+print(precision_val_pca_bal)   
+f1_val_pca_bal <- 2 * (precision_val_pca_bal * recall_val_pca_bal) / (precision_val_pca_bal + recall_val_pca_bal)
+print("F1-Measure for each class:") 
+print(f1_val_pca_bal)
+
+mean_f1_val_pca_bal <- mean(f1_val_pca_bal)
+
+print("F1-Measure Average:")
+print(mean_f1_val_pca_bal)
+```
+
+```{r}
+# Combine results into a table  
+results_table_val_pca_bal <- data.frame(      
+  Class_val_pca_bal = c("1", "2", "3", "4", "5"),      
+  Precision_val_pca_bal = round(precision_val_pca_bal, 2),      
+  Recall_val_pca_bal = round(recall_val_pca_bal, 2),      
+  F1_Measure_val_pca_bal = round(f1_val_pca_bal, 2) )   
+
+print(results_table_val_pca_bal)
+```
+
+```{r}
+accuracy_val_pca_bal <- sum(diag(confusion_matrix_val_pca_bal)) / sum(confusion_matrix_val_pca_bal)
+print(paste("Overall Accuracy:", accuracy_val_pca_bal * 100, "%"))
+```
+
+```{r}
+test_pca_bal_pred_class <- predict(multinom_model, newdata = test_pca, type = "class")
+confusion_matrix_test_pca_bal <- table(Predicted = test_pca_bal_pred_class, Actual = test_pca$CLC1N)
+print(confusion_matrix_test_pca_bal)
+```
+
+```{r}
+recall_test_pca_bal <- diag(confusion_matrix_test_pca_bal) / colSums(confusion_matrix_test_pca_bal)  
+print("Recall for each class:")  
+print(recall_test_pca_bal)   
+precision_test_pca_bal <- diag(confusion_matrix_test_pca_bal) / rowSums(confusion_matrix_test_pca_bal)  
+print("Precision for each class:")  
+print(precision_test_pca_bal)   
+f1_test_pca_bal <- 2 * (precision_test_pca_bal * recall_test_pca_bal) / (precision_test_pca_bal + recall_test_pca_bal)
+print("F1-Measure for each class:") 
+print(f1_test_pca_bal)
+
+mean_f1_test_pca_bal <- mean(f1_test_pca_bal)
+
+print("F1-Measure Average:")
+print(mean_f1_test_pca_bal)
+```
+
+```{r}
+# Combine results into a table  
+results_table_test_pca_bal <- data.frame(      
+  Class_test_pca_bal = c("1", "2", "3", "4", "5"),      
+  Precision_test_pca_bal = round(precision_test_pca_bal, 2),      
+  Recall_test_pca_bal = round(recall_test_pca_bal, 2),      
+  F1_Measure_test_pca_bal = round(f1_test_pca_bal, 2) )   
+
+print(results_table_test_pca_bal)  
+```
+
+```{r}
+accuracy_test_pca_bal <- sum(diag(confusion_matrix_test_pca_bal)) / sum(confusion_matrix_test_pca_bal)
+print(paste("Overall Accuracy:", accuracy_test_pca_bal * 100, "%"))
+```
